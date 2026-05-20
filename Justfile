@@ -1,17 +1,17 @@
 _default:
     @just --list
 
-# Run the API with hot reload (rebuild + restart on file change)
-dev:
-    bacon run -- --bin api
+# Run an app with hot reload (default: app). Usage: just dev mcp
+dev app="app":
+    bacon run -- --bin {{app}}
 
-# Run the API in release mode
-run:
-    cargo run --release --bin api
+# Run an app in release mode (default: app). Usage: just run mcp
+run app="app":
+    cargo run --release --bin {{app}}
 
-# Build the release binary
+# Build release binaries for every app in the workspace
 build:
-    cargo build --release --bin api
+    cargo build --workspace --release
 
 # Run the full test suite (parallel, fast)
 test:
