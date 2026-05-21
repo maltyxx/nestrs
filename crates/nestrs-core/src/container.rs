@@ -4,9 +4,18 @@ use std::sync::Arc;
 
 type AnyArc = Arc<dyn Any + Send + Sync>;
 
+/// A piece of metadata attached to a provider, or free-standing if no host
+/// is recorded. Discovered via [`crate::DiscoveryService::meta`].
+#[derive(Clone)]
+pub(crate) struct MetaEntry {
+    pub(crate) provider_type_id: Option<TypeId>,
+    pub(crate) meta: AnyArc,
+}
+
 #[derive(Clone, Default)]
 pub struct Container {
     providers: Arc<HashMap<TypeId, AnyArc>>,
+    metadata: Arc<HashMap<TypeId, Vec<MetaEntry>>>,
 }
 
 impl Container {
@@ -28,11 +37,18 @@ impl Container {
             .and_then(|any| any.clone().downcast::<Arc<T>>().ok())
             .map(|outer| (*outer).clone())
     }
+
+    /// Crate-internal read of the metadata index. Public callers go through
+    /// [`crate::DiscoveryService`].
+    pub(crate) fn metadata_entries(&self, key: TypeId) -> Option<&Vec<MetaEntry>> {
+        self.metadata.get(&key)
+    }
 }
 
 #[derive(Default)]
 pub struct ContainerBuilder {
     providers: HashMap<TypeId, AnyArc>,
+    metadata: HashMap<TypeId, Vec<MetaEntry>>,
 }
 
 impl ContainerBuilder {
@@ -58,9 +74,37 @@ impl ContainerBuilder {
         self
     }
 
+    /// Attach a piece of metadata of type `M` to the provider type `P`.
+    /// Discovery scanners (HTTP transport, future cron module, …) iterate
+    /// these via [`crate::DiscoveryService::meta`].
+    pub fn attach_meta<P: 'static, M: Any + Send + Sync>(mut self, meta: M) -> Self {
+        self.metadata
+            .entry(TypeId::of::<M>())
+            .or_default()
+            .push(MetaEntry {
+                provider_type_id: Some(TypeId::of::<P>()),
+                meta: Arc::new(meta),
+            });
+        self
+    }
+
+    /// Attach a piece of metadata not bound to a specific provider — e.g. a
+    /// module-level config descriptor that a scanner aggregates globally.
+    pub fn provide_meta<M: Any + Send + Sync>(mut self, meta: M) -> Self {
+        self.metadata
+            .entry(TypeId::of::<M>())
+            .or_default()
+            .push(MetaEntry {
+                provider_type_id: None,
+                meta: Arc::new(meta),
+            });
+        self
+    }
+
     pub fn build(self) -> Container {
         Container {
             providers: Arc::new(self.providers),
+            metadata: Arc::new(self.metadata),
         }
     }
 
@@ -70,6 +114,7 @@ impl ContainerBuilder {
     pub fn snapshot(&self) -> Container {
         Container {
             providers: Arc::new(self.providers.clone()),
+            metadata: Arc::new(self.metadata.clone()),
         }
     }
 }
@@ -156,5 +201,50 @@ mod tests {
 
         let resolved: Arc<dyn Hello + Send + Sync> = container.get_dyn().unwrap();
         assert_eq!(resolved.say(), "hi");
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct Marker(&'static str);
+
+    struct Host;
+
+    #[test]
+    fn attach_meta_preserves_insertion_order() {
+        let container = Container::builder()
+            .attach_meta::<Host, _>(Marker("first"))
+            .attach_meta::<Host, _>(Marker("second"))
+            .attach_meta::<Host, _>(Marker("third"))
+            .build();
+        let entries = container
+            .metadata_entries(TypeId::of::<Marker>())
+            .expect("Marker metadata present");
+        assert_eq!(entries.len(), 3);
+        let values: Vec<&str> = entries
+            .iter()
+            .map(|e| e.meta.clone().downcast::<Marker>().unwrap().0)
+            .collect();
+        assert_eq!(values, ["first", "second", "third"]);
+    }
+
+    #[test]
+    fn attach_meta_records_provider_type_id() {
+        let container = Container::builder()
+            .attach_meta::<Host, _>(Marker("hi"))
+            .build();
+        let entries = container.metadata_entries(TypeId::of::<Marker>()).unwrap();
+        assert_eq!(entries[0].provider_type_id, Some(TypeId::of::<Host>()));
+    }
+
+    #[test]
+    fn provide_meta_has_no_host() {
+        let container = Container::builder().provide_meta(Marker("free")).build();
+        let entries = container.metadata_entries(TypeId::of::<Marker>()).unwrap();
+        assert_eq!(entries[0].provider_type_id, None);
+    }
+
+    #[test]
+    fn metadata_returns_none_when_absent() {
+        let container = Container::builder().build();
+        assert!(container.metadata_entries(TypeId::of::<Marker>()).is_none());
     }
 }

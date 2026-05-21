@@ -40,7 +40,9 @@ dependencies = [
  "async-graphql",
  "async-graphql-poem",
  "nestrs-core",
+ "nestrs-graphql",
  "nestrs-health",
+ "nestrs-http",
  "nestrs-middleware",
  "nestrs-server-timing",
  "nestrs-telemetry",
@@ -51,6 +53,17 @@ dependencies = [
  "tracing",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "nestrs-core",
+ "nestrs-http",
+ "poem",
+ "tokio",
 ]
 
 [[package]]
@@ -1290,6 +1303,7 @@ dependencies = [
  "async-trait",
  "nestrs-core",
  "nestrs-health",
+ "nestrs-http",
  "nestrs-mcp",
  "nestrs-middleware",
  "nestrs-server-timing",
@@ -1348,10 +1362,23 @@ dependencies = [
 name = "nestrs-core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "async-trait",
  "figment",
  "nestrs-macros",
  "serde",
  "thiserror",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "nestrs-graphql"
+version = "0.1.0"
+dependencies = [
+ "async-graphql",
+ "nestrs-core",
 ]
 
 [[package]]
@@ -1360,8 +1387,23 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "nestrs-core",
+ "nestrs-http",
  "poem",
  "tokio",
+]
+
+[[package]]
+name = "nestrs-http"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "nestrs-core",
+ "nestrs-middleware",
+ "poem",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -1396,6 +1438,8 @@ name = "nestrs-server-timing"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "nestrs-core",
+ "nestrs-http",
  "nestrs-middleware",
  "poem",
 ]
@@ -1406,6 +1450,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "nestrs-core",
+ "nestrs-http",
  "nestrs-middleware",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -2748,6 +2793,7 @@ dependencies = [
  "futures-core",
  "futures-io",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]

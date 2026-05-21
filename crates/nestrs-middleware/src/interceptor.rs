@@ -33,6 +33,13 @@ pub trait Interceptor: Send + Sync + 'static {
     async fn intercept(&self, req: Request, next: Next<'_>) -> Result<Response>;
 }
 
+#[async_trait]
+impl<T: Interceptor + ?Sized> Interceptor for std::sync::Arc<T> {
+    async fn intercept(&self, req: Request, next: Next<'_>) -> Result<Response> {
+        (**self).intercept(req, next).await
+    }
+}
+
 /// The continuation passed to an [`Interceptor`]. Call [`Next::run`] to
 /// delegate to the inner endpoint (handler or the next interceptor in the
 /// chain).

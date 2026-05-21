@@ -26,6 +26,13 @@ pub trait Guard: Send + Sync + 'static {
     async fn check(&self, req: &Request) -> std::result::Result<(), Response>;
 }
 
+#[async_trait]
+impl<T: Guard + ?Sized> Guard for std::sync::Arc<T> {
+    async fn check(&self, req: &Request) -> std::result::Result<(), Response> {
+        (**self).check(req).await
+    }
+}
+
 /// Endpoint wrapper produced by [`EndpointExt::guard`](crate::EndpointExt::guard).
 pub struct GuardEndpoint<E, G> {
     inner: E,

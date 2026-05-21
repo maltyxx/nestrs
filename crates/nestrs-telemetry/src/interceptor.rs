@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use nestrs_core::{config::env_var, interceptor};
 use nestrs_middleware::{Interceptor, Next};
 use poem::{Request, Response, Result};
 
@@ -12,8 +13,6 @@ use {
     tracing::Instrument,
     tracing_opentelemetry::OpenTelemetrySpanExt,
 };
-
-use crate::config::TelemetryConfig;
 
 /// Per-request HTTP observation.
 ///
@@ -30,27 +29,34 @@ use crate::config::TelemetryConfig;
 /// One event = one line in text mode, one JSON object in JSON mode — no
 /// span-context prefix, no duplication.
 ///
-/// Toggle the access event via [`TelemetryConfig::http_access_log`]
-/// (env `NESTRS_HTTP__ACCESS_LOG`). The OTel span is always created so
-/// `traceparent` propagation and OTLP export keep working.
+/// Toggle the access event via the `NESTRS_HTTP__ACCESS_LOG` env var
+/// (default `true`; falsy values `0`/`false`/`off`/`no` disable). The OTel
+/// span is always created so `traceparent` propagation and OTLP export keep
+/// working.
+///
+/// Declare in a module — no per-call configuration needed:
+///
+/// ```ignore
+/// #[module(providers = [OtelHttp])]
+/// pub struct AppModule;
+/// ```
+#[interceptor]
 #[derive(Clone, Copy, Debug)]
 pub struct OtelHttp {
     access_log: bool,
 }
 
-impl OtelHttp {
-    pub fn with_config(config: &TelemetryConfig) -> Self {
-        Self {
-            access_log: config.http_access_log,
-        }
-    }
-}
-
 impl Default for OtelHttp {
-    /// Access log on. Use [`Self::with_config`] when the runtime toggle
-    /// should flow from env via [`TelemetryConfig`].
     fn default() -> Self {
-        Self { access_log: true }
+        let access_log = env_var("NESTRS_HTTP__ACCESS_LOG")
+            .map(|raw| {
+                !matches!(
+                    raw.trim().to_ascii_lowercase().as_str(),
+                    "0" | "false" | "off" | "no"
+                )
+            })
+            .unwrap_or(true);
+        Self { access_log }
     }
 }
 

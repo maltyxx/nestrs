@@ -1,8 +1,9 @@
 use nestrs_core::module;
 
+use crate::users::resolver::{UsersMutation, UsersQuery};
 use crate::users::service::UsersService;
 
-#[module(providers = [UsersService])]
+#[module(providers = [UsersService, UsersQuery, UsersMutation])]
 pub struct UsersModule;
 
 #[cfg(test)]

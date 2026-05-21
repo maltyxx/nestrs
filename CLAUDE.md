@@ -33,6 +33,26 @@ maintenance bar. The container in `crates/nestrs-core` is ours and stays ours.
 **Do not propose adopting an external DI crate.** If ergonomics fall short,
 extend ours.
 
+## Discovery is struct-level by default
+
+Anything a module wires up — providers, controllers, interceptors, future
+cron jobs, event handlers, MCP tools, … — implements `Discoverable` and is
+declared in a single flat `#[module(providers = [...])]` list. The container
+indexes attached metadata by type; transports and applicative scanners read
+it via `DiscoveryService::meta::<MetaT>()`. The `#[module]` macro itself is
+generic — it knows nothing about HTTP, MCP, or any specific surface.
+
+**Default to one struct per concern.** A cron job is a struct, an event
+handler is a struct, an MCP tool is a struct. Each carries its own
+decorator macro (`#[cron_job]`, `#[event_handler]`, `#[mcp_tool]`, …) that
+emits the single `impl Discoverable for Self` — no conflict, no central
+registry to update, third-party crates extend the system without touching
+`nestrs-macros`. **HTTP is the exception**: `#[routes]` orchestrates
+method-level verb attributes (`#[get]`, `#[post]`, …) on a controller's
+impl block, because regrouping endpoints into one struct each would be
+absurd. Method-level decoration outside HTTP needs a strong justification
+and a written design note.
+
 ## Naming rules — strict
 
 - Applications live under `apps/<name>/`. Not `examples/`, not `services/`.

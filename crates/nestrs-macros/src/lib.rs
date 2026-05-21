@@ -18,6 +18,10 @@ use syn::{
 /// - Other fields fall back to `Default::default()`.
 /// - If no field carries `#[inject]`, the macro defers to `<Self as Default>::default()`
 ///   so any custom `Default` impl on the struct is preserved.
+///
+/// Also emits `impl Discoverable for Self` so the struct is usable directly
+/// in `#[module(providers = [...])]`. The registration simply builds the
+/// value via `from_container` and stores it via `ContainerBuilder::provide`.
 #[proc_macro_attribute]
 pub fn injectable(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = parse_macro_input!(input as ItemStruct);
@@ -37,6 +41,16 @@ pub fn injectable(_args: TokenStream, input: TokenStream) -> TokenStream {
             pub fn from_container(container: &::nestrs_core::Container) -> Self {
                 let _ = container;
                 #body
+            }
+        }
+
+        impl #impl_generics ::nestrs_core::Discoverable for #name #ty_generics #where_clause {
+            fn register(
+                builder: ::nestrs_core::ContainerBuilder,
+            ) -> ::nestrs_core::ContainerBuilder {
+                let __snapshot = builder.snapshot();
+                let __value = Self::from_container(&__snapshot);
+                builder.provide(__value)
             }
         }
     }
@@ -115,10 +129,26 @@ fn build_injectable_body(item: &mut ItemStruct) -> syn::Result<TokenStream2> {
 // #[module]
 // -----------------------------------------------------------------------------
 
-/// `#[module(imports = [OtherModule], providers = [SomeService])]`.
+/// `#[module(imports = [...], providers = [...])]`.
 ///
-/// Both keys are optional. Providers are registered in order against a fresh
-/// snapshot of the container so a later provider can depend on an earlier one.
+/// Both keys are optional. `imports` lists other modules to compose in,
+/// each contributing their own providers and metadata via `Module::register`.
+/// `providers` lists everything this module declares — services,
+/// controllers, interceptors, future cron jobs / event handlers / MCP tools.
+///
+/// Each provider entry is one of:
+///
+/// - `Foo` — a concrete type that implements `Discoverable` (every
+///   `#[injectable]`, `#[controller]`+`#[routes]`, and `#[interceptor]`
+///   struct does). The macro expands to a single
+///   `<Foo as Discoverable>::register(builder)` call.
+/// - `Foo as dyn Trait` — a trait-object binding. The macro builds `Foo`
+///   from a snapshot and stores it under the trait's `TypeId` via
+///   `provide_dyn`, so dependents can inject `Arc<dyn Trait>`.
+///
+/// Order matters: entries register in the order they appear, against a
+/// snapshot of the container including all earlier entries (and all
+/// imports). Put dependencies before their consumers.
 #[proc_macro_attribute]
 pub fn module(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as ModuleArgs);
@@ -131,11 +161,7 @@ pub fn module(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let provider_calls = args.providers.iter().map(|binding| match binding {
         ProviderBinding::Concrete(p) => quote! {
-            {
-                let __snapshot = builder.snapshot();
-                let __provider = #p::from_container(&__snapshot);
-                builder = builder.provide(__provider);
-            }
+            builder = <#p as ::nestrs_core::Discoverable>::register(builder);
         },
         ProviderBinding::Dyn { provider, trait_ty } => quote! {
             {
@@ -240,6 +266,10 @@ impl Parse for ModuleArgs {
 ///
 /// Generates a `from_container(&Container) -> Self` constructor and a
 /// `pub const PATH: &'static str` used by `#[routes]` as the route prefix.
+///
+/// The `Discoverable` impl is emitted by `#[routes]` rather than here — it
+/// needs the route table that `#[routes]` collects, and emitting it in two
+/// places would conflict.
 #[proc_macro_attribute]
 pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as ControllerArgs);
@@ -289,6 +319,61 @@ impl Parse for ControllerArgs {
 }
 
 // -----------------------------------------------------------------------------
+// #[interceptor]
+// -----------------------------------------------------------------------------
+
+/// Mark a struct as an HTTP interceptor that the framework will discover
+/// and wrap around the route tree.
+///
+/// Behaves like `#[injectable]` for construction (fields with `#[inject]`
+/// pulled from the container, others default), and additionally emits an
+/// `impl Discoverable` that attaches an `HttpInterceptorMeta` describing
+/// this type. The HTTP transport reads those metas via
+/// `DiscoveryService::meta::<HttpInterceptorMeta>()` at boot.
+///
+/// The struct must implement `nestrs_middleware::Interceptor` — the macro
+/// emits an `Arc<dyn Interceptor>` cast that fails at compile time if it
+/// does not.
+#[proc_macro_attribute]
+pub fn interceptor(_args: TokenStream, input: TokenStream) -> TokenStream {
+    let mut item = parse_macro_input!(input as ItemStruct);
+
+    let body = match build_injectable_body(&mut item) {
+        Ok(body) => body,
+        Err(err) => return err.to_compile_error().into(),
+    };
+
+    let name = item.ident.clone();
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
+
+    quote! {
+        #item
+
+        impl #impl_generics #name #ty_generics #where_clause {
+            pub fn from_container(container: &::nestrs_core::Container) -> Self {
+                let _ = container;
+                #body
+            }
+        }
+
+        impl #impl_generics ::nestrs_core::Discoverable for #name #ty_generics #where_clause {
+            fn register(
+                builder: ::nestrs_core::ContainerBuilder,
+            ) -> ::nestrs_core::ContainerBuilder {
+                let __snapshot = builder.snapshot();
+                let __value = Self::from_container(&__snapshot);
+                let __arc: ::std::sync::Arc<dyn ::nestrs_middleware::Interceptor> =
+                    ::std::sync::Arc::new(__value);
+                builder.attach_meta::<Self, ::nestrs_http::HttpInterceptorMeta>(
+                    ::nestrs_http::HttpInterceptorMeta::new(__arc),
+                )
+            }
+        }
+    }
+    .into()
+}
+
+// -----------------------------------------------------------------------------
 // #[routes]
 // -----------------------------------------------------------------------------
 
@@ -299,8 +384,13 @@ impl Parse for ControllerArgs {
 /// `#[delete]` or `#[patch]` is wired as a poem handler. Method signatures
 /// keep `&self` plus any poem extractors (`Path<T>`, `Json<T>`, `Query<T>`...).
 ///
-/// Generates a `routes(container: &Container) -> impl IntoEndpoint` associated
-/// function on the controller, already nested under the controller's `PATH`.
+/// Emits two impls on the controller:
+/// - `nestrs_http::Controller` — the mount entry point used by the HTTP
+///   transport.
+/// - `nestrs_core::Discoverable` — attaches an `HttpControllerMeta` that
+///   carries the declarative route table (verb + path + handler name) plus
+///   a closure capturing the typed mount logic. The transport iterates
+///   these metas at boot.
 #[proc_macro_attribute]
 pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = parse_macro_input!(input as ItemImpl);
@@ -308,6 +398,7 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
 
     let mut wrappers: Vec<TokenStream2> = Vec::new();
     let mut route_entries: Vec<TokenStream2> = Vec::new();
+    let mut route_metas: Vec<TokenStream2> = Vec::new();
 
     for impl_item in item.items.iter_mut() {
         let ImplItem::Fn(method) = impl_item else {
@@ -334,6 +425,7 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let method_name = method.sig.ident.clone();
+        let method_name_lit = method_name.to_string();
         let wrapper_name = format_ident!("__nestrs_route_{}", method_name);
 
         let inputs: Vec<FnArg> = method.sig.inputs.iter().skip(1).cloned().collect();
@@ -372,6 +464,23 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
         route_entries.push(quote! {
             .at(#route_path, ::poem::#verb_ident(#wrapper_name))
         });
+
+        let verb_variant = match verb_ident.to_string().as_str() {
+            "get" => quote!(::nestrs_http::HttpVerb::Get),
+            "post" => quote!(::nestrs_http::HttpVerb::Post),
+            "put" => quote!(::nestrs_http::HttpVerb::Put),
+            "delete" => quote!(::nestrs_http::HttpVerb::Delete),
+            "patch" => quote!(::nestrs_http::HttpVerb::Patch),
+            _ => unreachable!("verb_ident filtered above"),
+        };
+
+        route_metas.push(quote! {
+            ::nestrs_http::HttpRouteMeta {
+                verb: #verb_variant,
+                path: #route_path,
+                handler: #method_name_lit,
+            }
+        });
     }
 
     quote! {
@@ -379,20 +488,288 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
 
         #(#wrappers)*
 
-        impl #self_ty {
-            pub fn routes(
+        impl ::nestrs_http::Controller for #self_ty {
+            fn mount(
                 container: &::nestrs_core::Container,
-            ) -> impl ::poem::IntoEndpoint {
+                route: ::poem::Route,
+            ) -> ::poem::Route {
                 use ::poem::EndpointExt;
                 let __ctrl = ::std::sync::Arc::new(<#self_ty>::from_container(container));
-                ::poem::Route::new().nest(
+                let __sub = ::poem::Route::new()
+                    #(#route_entries)*
+                    .data(__ctrl);
+                route.nest(<#self_ty>::PATH, __sub)
+            }
+        }
+
+        impl ::nestrs_core::Discoverable for #self_ty {
+            fn register(
+                builder: ::nestrs_core::ContainerBuilder,
+            ) -> ::nestrs_core::ContainerBuilder {
+                let __mount: ::std::sync::Arc<
+                    dyn ::core::ops::Fn(
+                            &::nestrs_core::Container,
+                            ::poem::Route,
+                        ) -> ::poem::Route
+                        + ::core::marker::Send
+                        + ::core::marker::Sync,
+                > = ::std::sync::Arc::new(|__c, __r| {
+                    <#self_ty as ::nestrs_http::Controller>::mount(__c, __r)
+                });
+                let __meta = ::nestrs_http::HttpControllerMeta::new(
                     <#self_ty>::PATH,
-                    ::poem::Route::new()
-                        #(#route_entries)*
-                        .data(__ctrl),
+                    ::std::vec![#(#route_metas),*],
+                    __mount,
+                );
+                builder.attach_meta::<#self_ty, ::nestrs_http::HttpControllerMeta>(__meta)
+            }
+        }
+    }
+    .into()
+}
+
+// -----------------------------------------------------------------------------
+// #[resolver(kind = Query | Mutation | Subscription)]
+// -----------------------------------------------------------------------------
+
+/// Mark a struct as a GraphQL resolver that participates in discovery.
+///
+/// Behaves like `#[injectable]` for construction (fields with `#[inject]`
+/// resolved from the container, others default), and additionally emits
+/// an `impl Discoverable` that attaches a `GraphQLResolverMeta` carrying
+/// the resolver kind (Query / Mutation / Subscription).
+///
+/// Unlike controllers, the meta is informational — async-graphql composes
+/// its `Schema<Q, M, S>` statically, so the schema is assembled by the
+/// `#[graphql_app]` macro that names the resolvers explicitly. The meta
+/// lets introspection tools list resolvers without parsing the schema.
+///
+/// Resolvers are *not* registered as providers in the container — they
+/// are built fresh by the `#[graphql_app]` macro at schema-build time.
+#[proc_macro_attribute]
+pub fn resolver(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as ResolverArgs);
+    let mut item = parse_macro_input!(input as ItemStruct);
+
+    let body = match build_injectable_body(&mut item) {
+        Ok(body) => body,
+        Err(err) => return err.to_compile_error().into(),
+    };
+
+    let name = item.ident.clone();
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
+    let kind_variant = match args.kind.as_str() {
+        "Query" => quote!(::nestrs_graphql::ResolverKind::Query),
+        "Mutation" => quote!(::nestrs_graphql::ResolverKind::Mutation),
+        "Subscription" => quote!(::nestrs_graphql::ResolverKind::Subscription),
+        _ => unreachable!("ResolverArgs::parse guards the variants"),
+    };
+
+    quote! {
+        #item
+
+        impl #impl_generics #name #ty_generics #where_clause {
+            pub fn from_container(container: &::nestrs_core::Container) -> Self {
+                let _ = container;
+                #body
+            }
+        }
+
+        impl #impl_generics ::nestrs_core::Discoverable for #name #ty_generics #where_clause {
+            fn register(
+                builder: ::nestrs_core::ContainerBuilder,
+            ) -> ::nestrs_core::ContainerBuilder {
+                builder.attach_meta::<Self, ::nestrs_graphql::GraphQLResolverMeta>(
+                    ::nestrs_graphql::GraphQLResolverMeta::new(
+                        #kind_variant,
+                        ::core::any::TypeId::of::<Self>(),
+                    ),
                 )
             }
         }
     }
     .into()
+}
+
+struct ResolverArgs {
+    kind: String,
+}
+
+impl Parse for ResolverArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let key: Ident = input.parse()?;
+        if key != "kind" {
+            return Err(syn::Error::new(
+                key.span(),
+                "expected `kind = Query | Mutation | Subscription` as the #[resolver] argument",
+            ));
+        }
+        input.parse::<Token![=]>()?;
+        let val: Ident = input.parse()?;
+        let s = val.to_string();
+        if !matches!(s.as_str(), "Query" | "Mutation" | "Subscription") {
+            return Err(syn::Error::new(
+                val.span(),
+                "kind must be one of `Query`, `Mutation`, or `Subscription`",
+            ));
+        }
+        Ok(Self { kind: s })
+    }
+}
+
+// -----------------------------------------------------------------------------
+// #[graphql_app(queries = [...], mutations = [...], subscriptions = [...])]
+// -----------------------------------------------------------------------------
+
+/// Compose discovered resolvers into a single GraphQL schema.
+///
+/// Applied to a unit marker struct. The macro generates one
+/// `async_graphql::MergedObject` per root (Query / Mutation /
+/// Subscription) and an inherent `build(container) -> Schema<...>`
+/// method that constructs each resolver via `from_container` and
+/// assembles the schema. The container is also attached as schema data.
+///
+/// Composition is static because `async-graphql`'s root types live in
+/// the `Schema<Q, M, S>` parameters — they cannot be assembled
+/// dynamically at runtime from a `DiscoveryService` walk. `#[resolver]`
+/// still emits discovery metadata, so introspection / docs tooling can
+/// list resolvers; only the schema wiring itself is static.
+///
+/// `queries = [...]` is required (a GraphQL schema needs a Query root).
+/// `mutations` and `subscriptions` are optional — when omitted or empty,
+/// async-graphql's `EmptyMutation` / `EmptySubscription` are used.
+#[proc_macro_attribute]
+pub fn graphql_app(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as GraphQLAppArgs);
+    let item = parse_macro_input!(input as ItemStruct);
+    let name = item.ident.clone();
+
+    if args.queries.is_empty() {
+        return syn::Error::new_spanned(
+            &item,
+            "#[graphql_app] requires a non-empty `queries = [...]` list",
+        )
+        .to_compile_error()
+        .into();
+    }
+
+    let query_root = format_ident!("__{}QueryRoot", name);
+    let mutation_root = format_ident!("__{}MutationRoot", name);
+    let subscription_root = format_ident!("__{}SubscriptionRoot", name);
+
+    let queries = &args.queries;
+    let mutations = &args.mutations;
+    let subscriptions = &args.subscriptions;
+
+    let query_decl = quote! {
+        #[derive(::nestrs_graphql::async_graphql::MergedObject)]
+        pub struct #query_root(#(pub #queries),*);
+    };
+    let query_expr = quote! {
+        #query_root(#(<#queries>::from_container(&container)),*)
+    };
+
+    let (mutation_decl, mutation_ty, mutation_expr) = if mutations.is_empty() {
+        (
+            quote!(),
+            quote!(::nestrs_graphql::async_graphql::EmptyMutation),
+            quote!(::nestrs_graphql::async_graphql::EmptyMutation),
+        )
+    } else {
+        (
+            quote! {
+                #[derive(::nestrs_graphql::async_graphql::MergedObject)]
+                pub struct #mutation_root(#(pub #mutations),*);
+            },
+            quote!(#mutation_root),
+            quote! {
+                #mutation_root(#(<#mutations>::from_container(&container)),*)
+            },
+        )
+    };
+
+    let (subscription_decl, subscription_ty, subscription_expr) = if subscriptions.is_empty() {
+        (
+            quote!(),
+            quote!(::nestrs_graphql::async_graphql::EmptySubscription),
+            quote!(::nestrs_graphql::async_graphql::EmptySubscription),
+        )
+    } else {
+        (
+            quote! {
+                #[derive(::nestrs_graphql::async_graphql::MergedSubscription)]
+                pub struct #subscription_root(#(pub #subscriptions),*);
+            },
+            quote!(#subscription_root),
+            quote! {
+                #subscription_root(#(<#subscriptions>::from_container(&container)),*)
+            },
+        )
+    };
+
+    quote! {
+        #item
+
+        #query_decl
+        #mutation_decl
+        #subscription_decl
+
+        impl #name {
+            pub fn build(
+                container: ::nestrs_core::Container,
+            ) -> ::nestrs_graphql::async_graphql::Schema<
+                #query_root,
+                #mutation_ty,
+                #subscription_ty,
+            > {
+                ::nestrs_graphql::async_graphql::Schema::build(
+                    #query_expr,
+                    #mutation_expr,
+                    #subscription_expr,
+                )
+                .data(container)
+                .finish()
+            }
+        }
+    }
+    .into()
+}
+
+#[derive(Default)]
+struct GraphQLAppArgs {
+    queries: Vec<Path>,
+    mutations: Vec<Path>,
+    subscriptions: Vec<Path>,
+}
+
+impl Parse for GraphQLAppArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut args = GraphQLAppArgs::default();
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let content;
+            bracketed!(content in input);
+            let paths: Punctuated<Path, Token![,]> = Punctuated::parse_terminated(&content)?;
+
+            match key.to_string().as_str() {
+                "queries" => args.queries.extend(paths),
+                "mutations" => args.mutations.extend(paths),
+                "subscriptions" => args.subscriptions.extend(paths),
+                other => {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!(
+                            "unknown #[graphql_app] key `{other}` (expected `queries`, `mutations`, or `subscriptions`)"
+                        ),
+                    ));
+                }
+            }
+
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
+        }
+        Ok(args)
+    }
 }

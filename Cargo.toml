@@ -14,6 +14,7 @@ repository = "https://github.com/yvanitou/nestrs"
 [workspace.dependencies]
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # Tracing / logging
 tracing = "0.1"
@@ -78,7 +79,9 @@ proc-macro2 = "1"
 # Internal crates
 nestrs-core = { path = "crates/nestrs-core" }
 nestrs-macros = { path = "crates/nestrs-macros" }
+nestrs-graphql = { path = "crates/nestrs-graphql" }
 nestrs-health = { path = "crates/nestrs-health" }
+nestrs-http = { path = "crates/nestrs-http" }
 nestrs-mcp = { path = "crates/nestrs-mcp" }
 nestrs-middleware = { path = "crates/nestrs-middleware" }
 nestrs-server-timing = { path = "crates/nestrs-server-timing" }

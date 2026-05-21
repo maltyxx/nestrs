@@ -46,6 +46,13 @@ pub trait Filter: Send + Sync + 'static {
     async fn filter(&self, req: &RequestSnapshot, error: poem::Error) -> Response;
 }
 
+#[async_trait]
+impl<T: Filter + ?Sized> Filter for std::sync::Arc<T> {
+    async fn filter(&self, req: &RequestSnapshot, error: poem::Error) -> Response {
+        (**self).filter(req, error).await
+    }
+}
+
 /// Endpoint wrapper produced by [`EndpointExt::filter`](crate::EndpointExt::filter).
 pub struct FilterEndpoint<E, F> {
     inner: E,

@@ -53,11 +53,14 @@ run` time:
 ```bash
 docker build -t nestrs .
 
-# Run the default app (api) on port 3000
-docker run --rm -p 3000:3000 nestrs
+# Run the app on port 3001
+docker run --rm -p 3001:3001 nestrs /usr/local/bin/app
 
-# Run the mcp app on port 3001
-docker run --rm -p 3001:3001 nestrs /usr/local/bin/mcp
+# Run the default app (api) on port 3002
+docker run --rm -p 3002:3002 nestrs
+
+# Run the mcp app on port 3003
+docker run --rm -p 3003:3003 nestrs /usr/local/bin/mcp
 ```
 
 Adding a new app under `apps/` requires no Dockerfile change — the builder
@@ -76,9 +79,9 @@ Security defaults baked in:
 
 ## Applications
 
-### `api` — HTTP + GraphQL (port 3000)
+### `api` — HTTP + GraphQL (port 3002)
 
-Started with `just dev api`. Listens on `http://0.0.0.0:3000`:
+Started with `just dev api`. Listens on `http://0.0.0.0:3002`:
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -88,7 +91,14 @@ Started with `just dev api`. Listens on `http://0.0.0.0:3000`:
 | `GET  /health/ready` | Kubernetes readiness probe |
 | `GET  /health/startup` | Kubernetes startup probe |
 
-### `mcp` — Model Context Protocol server (port 3001)
+### `app` — Minimal HTTP endpoint (port 3001)
+
+Started with `just dev app`. Listens on `http://0.0.0.0:3001` with a single
+`GET /` returning `Hello World`. Kept deliberately bare — no health, telemetry,
+or middleware — to serve as a baseline when benchmarking the framework's
+request path.
+
+### `mcp` — Model Context Protocol server (port 3003)
 
 Started with `just dev mcp`. Exposes a Streamable-HTTP MCP server backed by
 `rmcp`, with tools declared the same way controllers are — `#[injectable]` for
@@ -107,7 +117,7 @@ checked at the start of the tool handler.
 | `GET  /health/startup` | Kubernetes startup probe |
 
 Point any MCP client (Claude Desktop, Cursor, custom integrations) at
-`http://localhost:3001/mcp`.
+`http://localhost:3003/mcp`.
 
 ## License
 

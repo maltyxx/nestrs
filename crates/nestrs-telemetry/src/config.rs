@@ -6,8 +6,8 @@ use nestrs_core::config::env_var;
 ///
 /// Follows the framework-wide `NESTRS_<DOMAIN>__<KEY>` scheme documented in
 /// `nestrs_core::config` — double underscore separates the domain, the leaf
-/// key keeps snake_case. Four domains are owned here: `log`, `service`,
-/// `telemetry`, `http`.
+/// key keeps snake_case. Three domains are owned here: `log`, `service`,
+/// `telemetry`. The `http` domain is owned by [`crate::OtelHttp`] directly.
 ///
 /// | Setting              | Variable                            | Values / default                  |
 /// |----------------------|-------------------------------------|-----------------------------------|
@@ -19,7 +19,6 @@ use nestrs_core::config::env_var;
 /// | instance id          | `NESTRS_SERVICE__INSTANCE_ID`       | string (default: fresh UUID v7)   |
 /// | OTLP endpoint        | `NESTRS_TELEMETRY__OTLP_ENDPOINT`   | base URL, e.g. `http://otel:4318` |
 /// | sampler ratio        | `NESTRS_TELEMETRY__SAMPLE_RATIO`    | `[0.0, 1.0]`, default `1.0`       |
-/// | http access log      | `NESTRS_HTTP__ACCESS_LOG`           | `true` (default) \| `false`       |
 ///
 /// The OTel exporter is wired only when [`Self::otlp_endpoint`] is `Some`;
 /// otherwise telemetry stays console-only.
@@ -47,13 +46,6 @@ pub struct TelemetryConfig {
     /// pick `0.05` or `0.1` in prod. Wrapped in `ParentBased` so child
     /// spans inherit the parent's sampling decision.
     pub trace_sample_ratio: f64,
-    /// When true, [`crate::OtelHttp`] emits one `tracing::info!` event per
-    /// HTTP request (target `nestrs::access`) with the htaccess-style
-    /// summary plus `duration_ms`. The OTel span attributes already carry
-    /// method/route/status/trace_id, so this only adds the operator-readable
-    /// line. Disable in high-volume prod APIs where the span context alone
-    /// is enough.
-    pub http_access_log: bool,
 }
 
 /// Console log encoding.
@@ -87,7 +79,6 @@ impl TelemetryConfig {
             log_format: LogFormat::Text,
             otlp_endpoint: None,
             trace_sample_ratio: 1.0,
-            http_access_log: true,
         }
     }
 
@@ -120,12 +111,6 @@ impl TelemetryConfig {
             }
         }
 
-        if let Some(raw) = env_var("NESTRS_HTTP__ACCESS_LOG") {
-            cfg.http_access_log = !matches!(
-                raw.trim().to_ascii_lowercase().as_str(),
-                "0" | "false" | "off" | "no"
-            );
-        }
         cfg
     }
 
@@ -158,11 +143,6 @@ impl TelemetryConfig {
         self.trace_sample_ratio = ratio.clamp(0.0, 1.0);
         self
     }
-
-    pub fn with_http_access_log(mut self, enabled: bool) -> Self {
-        self.http_access_log = enabled;
-        self
-    }
 }
 
 #[cfg(test)]
@@ -176,7 +156,6 @@ mod tests {
         assert!(cfg.otlp_endpoint.is_none());
         assert_eq!(cfg.log_filter, "info");
         assert_eq!(cfg.log_format, LogFormat::Text);
-        assert!(cfg.http_access_log);
     }
 
     #[test]

@@ -1,15 +1,18 @@
 [package]
-name = "nestrs-server-timing"
+name = "nestrs-http"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "W3C Server-Timing response header interceptor for nestrs apps (independent of OpenTelemetry)."
+description = "HTTP transport for nestrs: HttpTransport, Controller trait and HttpControllerMeta, built on top of poem."
 
 [dependencies]
 nestrs-core.workspace = true
-nestrs-http.workspace = true
 nestrs-middleware.workspace = true
 poem.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
 async-trait.workspace = true
+anyhow.workspace = true
+tracing.workspace = true

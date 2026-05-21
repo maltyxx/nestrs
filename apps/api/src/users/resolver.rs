@@ -1,44 +1,41 @@
 use std::sync::Arc;
 
-use async_graphql::{Context, Object, Result};
-use nestrs_core::Container;
+use async_graphql::{Object, Result};
+use nestrs_core::resolver;
 
 use crate::users::dto::{CreateUserInput, UserDto};
 use crate::users::service::UsersService;
-
-fn users_service(ctx: &Context<'_>) -> Result<Arc<UsersService>> {
-    ctx.data::<Container>()?
-        .get()
-        .ok_or_else(|| async_graphql::Error::new("UsersService is not registered"))
-}
 
 fn to_gql_error(error: impl std::fmt::Display) -> async_graphql::Error {
     async_graphql::Error::new(error.to_string())
 }
 
-#[derive(Default)]
-pub struct UsersQuery;
+#[resolver(kind = Query)]
+pub struct UsersQuery {
+    #[inject]
+    users: Arc<UsersService>,
+}
 
 #[Object]
 impl UsersQuery {
-    async fn users(&self, ctx: &Context<'_>) -> Result<Vec<UserDto>> {
-        Ok(users_service(ctx)?.list().await)
+    async fn users(&self) -> Vec<UserDto> {
+        self.users.list().await
     }
 
-    async fn user(&self, ctx: &Context<'_>, id: String) -> Result<Option<UserDto>> {
-        users_service(ctx)?.find(&id).await.map_err(to_gql_error)
+    async fn user(&self, id: String) -> Result<Option<UserDto>> {
+        self.users.find(&id).await.map_err(to_gql_error)
     }
 }
 
-#[derive(Default)]
-pub struct UsersMutation;
+#[resolver(kind = Mutation)]
+pub struct UsersMutation {
+    #[inject]
+    users: Arc<UsersService>,
+}
 
 #[Object]
 impl UsersMutation {
-    async fn create_user(&self, ctx: &Context<'_>, input: CreateUserInput) -> Result<UserDto> {
-        users_service(ctx)?
-            .create(input)
-            .await
-            .map_err(to_gql_error)
+    async fn create_user(&self, input: CreateUserInput) -> Result<UserDto> {
+        self.users.create(input).await.map_err(to_gql_error)
     }
 }

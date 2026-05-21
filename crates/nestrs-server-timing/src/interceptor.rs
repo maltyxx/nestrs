@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use async_trait::async_trait;
+use nestrs_core::interceptor;
 use nestrs_middleware::{Interceptor, Next};
 use poem::http::HeaderName;
 use poem::{Request, Response, Result};
@@ -10,6 +11,7 @@ use crate::format::format_header;
 
 const SERVER_TIMING: HeaderName = HeaderName::from_static("server-timing");
 
+#[interceptor]
 #[derive(Default)]
 pub struct ServerTiming;
 

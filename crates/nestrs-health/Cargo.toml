@@ -9,6 +9,7 @@ description = "Reusable Kubernetes-style liveness/readiness probe module for nes
 
 [dependencies]
 nestrs-core.workspace = true
+nestrs-http.workspace = true
 poem.workspace = true
 async-trait.workspace = true
 

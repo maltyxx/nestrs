@@ -12,6 +12,11 @@ thiserror.workspace = true
 figment.workspace = true
 serde.workspace = true
 nestrs-macros.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+async-trait.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 figment = { workspace = true, features = ["test"] }

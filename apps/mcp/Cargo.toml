@@ -8,6 +8,7 @@ publish = false
 nestrs-core.workspace = true
 nestrs-mcp.workspace = true
 nestrs-health.workspace = true
+nestrs-http.workspace = true
 nestrs-middleware.workspace = true
 nestrs-server-timing.workspace = true
 nestrs-telemetry.workspace = true
