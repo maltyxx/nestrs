@@ -7,4 +7,4 @@ USER vscode
 RUN rustup component add rust-analyzer llvm-tools-preview \
  && cargo install --locked cargo-binstall \
  && cargo binstall --no-confirm --locked \
-      just bacon cargo-nextest cargo-llvm-cov
+      just bacon cargo-nextest cargo-llvm-cov cargo-audit cargo-outdated
