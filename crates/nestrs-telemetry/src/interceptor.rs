@@ -5,28 +5,57 @@ use poem::{Request, Response, Result};
 #[cfg(feature = "otlp")]
 use {
     opentelemetry::global,
+    opentelemetry::trace::TraceContextExt,
     opentelemetry_http::HeaderExtractor,
+    poem::http::{HeaderName, HeaderValue},
+    std::time::Instant,
     tracing::Instrument,
     tracing_opentelemetry::OpenTelemetrySpanExt,
 };
 
-/// Extracts the OTel context from incoming W3C `traceparent` / `tracestate`
-/// headers and opens a per-request `tracing` span parented on it. Spans
-/// created with `#[instrument]` inside handlers become children automatically,
-/// so traces stitch across services without any handler-level wiring.
+use crate::config::TelemetryConfig;
+
+/// Per-request HTTP observation.
 ///
-/// Field names follow the stable HTTP OTel semantic conventions
-/// (`http.request.method`, `http.route`, `http.response.status_code`).
+/// Opens a `tracing` span with OTel HTTP semantic-convention attributes
+/// (`http.request.method`, `http.route`, `http.response.status_code`,
+/// `otel.kind`), parents it on any incoming W3C `traceparent` header, and
+/// surfaces the trace id as an `X-Trace-Id` response header. The span is
+/// what OTel sees and exports; **it is not rendered** in the console
+/// (`FmtSpan::NONE`).
 ///
-/// No-op when the `otlp` feature is off.
-#[derive(Default)]
-pub struct OtelHttp;
+/// The visible per-request log line is a single `tracing::info!` event
+/// (target `nestrs::access`) emitted at request end, with short, structured
+/// field names (`method`, `path`, `status`, `duration_ms`, `trace_id`).
+/// One event = one line in text mode, one JSON object in JSON mode — no
+/// span-context prefix, no duplication.
+///
+/// Toggle the access event via [`TelemetryConfig::http_access_log`]
+/// (env `NESTRS_HTTP__ACCESS_LOG`). The OTel span is always created so
+/// `traceparent` propagation and OTLP export keep working.
+#[derive(Clone, Copy, Debug)]
+pub struct OtelHttp {
+    access_log: bool,
+}
 
 impl OtelHttp {
-    pub fn new() -> Self {
-        Self
+    pub fn with_config(config: &TelemetryConfig) -> Self {
+        Self {
+            access_log: config.http_access_log,
+        }
     }
 }
+
+impl Default for OtelHttp {
+    /// Access log on. Use [`Self::with_config`] when the runtime toggle
+    /// should flow from env via [`TelemetryConfig`].
+    fn default() -> Self {
+        Self { access_log: true }
+    }
+}
+
+#[cfg(feature = "otlp")]
+const X_TRACE_ID: HeaderName = HeaderName::from_static("x-trace-id");
 
 #[async_trait]
 impl Interceptor for OtelHttp {
@@ -34,12 +63,21 @@ impl Interceptor for OtelHttp {
     async fn intercept(&self, mut req: Request, next: Next<'_>) -> Result<Response> {
         #[cfg(feature = "otlp")]
         {
+            let method = req.method().clone();
+            let path = req.uri().path().to_string();
+            let client_ip = client_ip(&req);
+            let user_agent = user_agent(&req);
+            let ua = user_agent.as_deref().unwrap_or("");
+
             let span = tracing::info_span!(
                 "http.request",
                 otel.kind = "server",
-                http.request.method = %req.method(),
-                http.route = %req.uri().path(),
+                http.request.method = %method,
+                http.route = %path,
+                client.address = %client_ip,
+                user_agent.original = %ua,
                 http.response.status_code = tracing::field::Empty,
+                http.response.body.size = tracing::field::Empty,
             );
 
             // The propagator lookup + HeaderExtractor walk costs a RwLock read
@@ -51,21 +89,95 @@ impl Interceptor for OtelHttp {
                 let _ = span.set_parent(parent_cx);
             }
 
+            let trace_id = current_trace_id(&span);
+            let trace_header = trace_id
+                .as_deref()
+                .and_then(|tid| HeaderValue::from_str(tid).ok());
+
+            let start = Instant::now();
             let res = next.run(req).instrument(span.clone()).await;
-            match res {
-                Ok(r) => {
-                    span.record("http.response.status_code", r.status().as_u16());
-                    Ok(r)
+            let duration_ms = start.elapsed().as_millis() as u64;
+
+            let (status, bytes, out) = match res {
+                Ok(mut r) => {
+                    let s = r.status().as_u16();
+                    let b = response_bytes(&r);
+                    span.record("http.response.status_code", s);
+                    span.record("http.response.body.size", b);
+                    if let Some(val) = trace_header {
+                        r.headers_mut().insert(X_TRACE_ID, val);
+                    }
+                    (s, b, Ok(r))
                 }
                 Err(err) => {
-                    span.record("http.response.status_code", err.status().as_u16());
-                    Err(err)
+                    let s = err.status().as_u16();
+                    span.record("http.response.status_code", s);
+                    (s, 0, Err(err))
                 }
+            };
+
+            // Emit *outside* the span scope so the console line has no span
+            // context prefix — just one clean line per request.
+            if self.access_log {
+                tracing::info!(
+                    target: "nestrs::access",
+                    method = %method,
+                    path = %path,
+                    status = status,
+                    bytes = bytes,
+                    duration_ms = duration_ms,
+                    client_ip = %client_ip,
+                    user_agent = %ua,
+                    trace_id = trace_id.as_deref().unwrap_or(""),
+                );
             }
+
+            out
         }
         #[cfg(not(feature = "otlp"))]
         {
             next.run(req).await
         }
     }
+}
+
+#[cfg(feature = "otlp")]
+fn current_trace_id(span: &tracing::Span) -> Option<String> {
+    let otel_ctx = span.context();
+    let span_ctx = otel_ctx.span().span_context().clone();
+    span_ctx.is_valid().then(|| span_ctx.trace_id().to_string())
+}
+
+#[cfg(feature = "otlp")]
+fn client_ip(req: &Request) -> String {
+    // Strip the port for log readability; fall back to the raw Display when
+    // the connection isn't a TCP socket (e.g. UDS in tests).
+    req.remote_addr()
+        .as_socket_addr()
+        .map(|sa| sa.ip().to_string())
+        .unwrap_or_else(|| req.remote_addr().to_string())
+}
+
+#[cfg(feature = "otlp")]
+fn response_bytes(res: &Response) -> u64 {
+    // Read the `Content-Length` header. Poem keeps the underlying http-body
+    // hidden (`BoxBody` is `pub(crate)`) so we can't probe a `SizeHint`
+    // without buffering. Handlers that return `Body::from_string`/`Bytes`
+    // get CL stamped by Poem at wire time — past this point in the chain
+    // — so the field reads `0`. Set CL explicitly in the handler when the
+    // byte count must show up in access logs. Streaming/chunked responses
+    // also log `0`, matching Apache's `%B` behaviour for unknown sizes.
+    res.headers()
+        .get(poem::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
+#[cfg(feature = "otlp")]
+fn user_agent(req: &Request) -> Option<String> {
+    req.headers()
+        .get(poem::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned)
 }

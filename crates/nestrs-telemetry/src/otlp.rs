@@ -1,7 +1,9 @@
-//! OTLP exporter construction. Builds the three providers (traces, metrics,
-//! logs) over HTTP/protobuf and registers them as the OTel globals so the
-//! `tracing` bridges and the `opentelemetry::global::meter(...)` accessor
-//! see them.
+//! OTel SDK wiring. Always installs a local tracer + W3C propagator (so
+//! `tracing` spans get trace ids and `traceparent` headers propagate even
+//! without an exporter). When an OTLP endpoint is configured, also attaches
+//! batch exporters for the three signals (traces, metrics, logs) over
+//! HTTP/protobuf and registers the corresponding providers as the OTel
+//! globals.
 
 use opentelemetry::global;
 use opentelemetry::trace::TracerProvider as _;
@@ -24,56 +26,75 @@ use crate::error::TelemetryError;
 pub(crate) struct Exporters {
     pub tracer: opentelemetry_sdk::trace::Tracer,
     pub tracer_provider: SdkTracerProvider,
-    pub meter_provider: SdkMeterProvider,
-    pub logger_provider: SdkLoggerProvider,
+    /// `Some` only when an OTLP endpoint is configured. Without an exporter
+    /// the meter provider has nothing to do, so we don't build one.
+    pub meter_provider: Option<SdkMeterProvider>,
+    /// `Some` only when an OTLP endpoint is configured. Same reasoning as
+    /// the meter — the appender layer is wired only when there is somewhere
+    /// to send logs.
+    pub logger_provider: Option<SdkLoggerProvider>,
 }
 
-pub(crate) fn build(config: &TelemetryConfig, endpoint: &str) -> Result<Exporters, TelemetryError> {
+pub(crate) fn build(config: &TelemetryConfig) -> Result<Exporters, TelemetryError> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     let resource = build_resource(config);
-    let base = endpoint.trim_end_matches('/');
-
-    let span_exporter = SpanExporter::builder()
-        .with_http()
-        .with_endpoint(format!("{}/v1/traces", base))
-        .with_protocol(Protocol::HttpBinary)
-        .build()
-        .map_err(|e| TelemetryError::Otlp(e.to_string()))?;
     let sampler = Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
         config.trace_sample_ratio,
     )));
-    let tracer_provider = SdkTracerProvider::builder()
+
+    let mut tracer_builder = SdkTracerProvider::builder()
         .with_resource(resource.clone())
-        .with_sampler(sampler)
-        .with_batch_exporter(span_exporter)
-        .build();
+        .with_sampler(sampler);
+
+    let endpoint = config
+        .otlp_endpoint
+        .as_deref()
+        .map(|s| s.trim_end_matches('/'));
+
+    if let Some(base) = endpoint {
+        let span_exporter = SpanExporter::builder()
+            .with_http()
+            .with_endpoint(format!("{}/v1/traces", base))
+            .with_protocol(Protocol::HttpBinary)
+            .build()
+            .map_err(|e| TelemetryError::Otlp(e.to_string()))?;
+        tracer_builder = tracer_builder.with_batch_exporter(span_exporter);
+    }
+
+    let tracer_provider = tracer_builder.build();
     let tracer = tracer_provider.tracer(config.service_name.clone());
     global::set_tracer_provider(tracer_provider.clone());
 
-    let metric_exporter = MetricExporter::builder()
-        .with_http()
-        .with_endpoint(format!("{}/v1/metrics", base))
-        .with_protocol(Protocol::HttpBinary)
-        .build()
-        .map_err(|e| TelemetryError::Otlp(e.to_string()))?;
-    let reader = PeriodicReader::builder(metric_exporter).build();
-    let meter_provider = SdkMeterProvider::builder()
-        .with_resource(resource.clone())
-        .with_reader(reader)
-        .build();
-    global::set_meter_provider(meter_provider.clone());
+    let (meter_provider, logger_provider) = if let Some(base) = endpoint {
+        let metric_exporter = MetricExporter::builder()
+            .with_http()
+            .with_endpoint(format!("{}/v1/metrics", base))
+            .with_protocol(Protocol::HttpBinary)
+            .build()
+            .map_err(|e| TelemetryError::Otlp(e.to_string()))?;
+        let reader = PeriodicReader::builder(metric_exporter).build();
+        let meter_provider = SdkMeterProvider::builder()
+            .with_resource(resource.clone())
+            .with_reader(reader)
+            .build();
+        global::set_meter_provider(meter_provider.clone());
 
-    let log_exporter = LogExporter::builder()
-        .with_http()
-        .with_endpoint(format!("{}/v1/logs", base))
-        .with_protocol(Protocol::HttpBinary)
-        .build()
-        .map_err(|e| TelemetryError::Otlp(e.to_string()))?;
-    let logger_provider = SdkLoggerProvider::builder()
-        .with_resource(resource)
-        .with_batch_exporter(log_exporter)
-        .build();
+        let log_exporter = LogExporter::builder()
+            .with_http()
+            .with_endpoint(format!("{}/v1/logs", base))
+            .with_protocol(Protocol::HttpBinary)
+            .build()
+            .map_err(|e| TelemetryError::Otlp(e.to_string()))?;
+        let logger_provider = SdkLoggerProvider::builder()
+            .with_resource(resource)
+            .with_batch_exporter(log_exporter)
+            .build();
+
+        (Some(meter_provider), Some(logger_provider))
+    } else {
+        (None, None)
+    };
 
     Ok(Exporters {
         tracer,

@@ -2,16 +2,21 @@
 //!
 //! Single entry point: [`Telemetry::init`] sets up `tracing` (console fmt
 //! always; OTLP exporter when the `otlp` feature is on and
-//! `OTEL_EXPORTER_OTLP_ENDPOINT` is set). The returned [`TelemetryGuard`]
-//! flushes pending spans on drop, so it must outlive `main`'s work.
+//! `NESTRS_TELEMETRY__OTLP_ENDPOINT` is set). The returned [`Telemetry`]
+//! guard flushes pending spans on drop, so it must outlive `main`'s work.
 //!
-//! The [`OtelHttp`] interceptor bridges incoming W3C `traceparent` headers
-//! into per-request `tracing` spans, so traces stitch together across
-//! services.
+//! All runtime knobs live behind the `NESTRS_<DOMAIN>__<KEY>` env-var
+//! scheme — see [`TelemetryConfig`] for the full table.
 //!
-//! The W3C Server-Timing response header lives in a separate crate,
-//! `nestrs-server-timing`, because its responsibility (browser-visible
-//! per-request cost) is unrelated to OpenTelemetry export.
+//! [`OtelHttp`] is the HTTP interceptor: it bridges incoming W3C
+//! `traceparent` headers into per-request `tracing` spans, records the
+//! response status, surfaces the trace id as `X-Trace-Id` on responses, and
+//! — when the [`TelemetryConfig::http_access_log`] toggle is on — emits one
+//! `tracing::info!` event per request with the htaccess-style summary.
+//!
+//! Sibling HTTP middleware lives in its own crate when it does not drive
+//! OTel export:
+//! - `nestrs-server-timing` — W3C Server-Timing response header.
 
 mod config;
 mod error;
@@ -21,7 +26,7 @@ mod module;
 mod otlp;
 mod telemetry;
 
-pub use config::TelemetryConfig;
+pub use config::{LogFormat, TelemetryConfig};
 pub use error::TelemetryError;
 pub use interceptor::OtelHttp;
 #[cfg(feature = "otlp")]
