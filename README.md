@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="nestrs logo" width="160" height="160">
+</p>
+
 # NestRS
 
 An opinionated Rust framework that leans on procedural macros to keep
