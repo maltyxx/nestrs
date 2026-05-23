@@ -18,15 +18,20 @@
 //!   the discovery metadata that the `#[routes]`, `#[graphql]` /
 //!   `#[mcp]`, and `#[interceptor]` macros attach to a type; the
 //!   transport reads them at boot via [`nestrs_core::DiscoveryService`].
+//! - [`Valid`] / [`Piped`] — the poem adapter that applies a `nestrs_pipes`
+//!   pipe to a handler parameter between extraction and the handler (validate
+//!   or transform); the pipes themselves live in `nestrs-pipes`.
 
 mod controller;
 mod endpoint;
 mod interceptor;
+mod pipe;
 mod transport;
 
 pub use controller::{Controller, HttpControllerMeta, HttpRouteMeta, HttpVerb};
 pub use endpoint::HttpEndpointMeta;
 pub use interceptor::HttpInterceptorMeta;
+pub use pipe::{IntoInner, Piped, Valid};
 pub use transport::HttpTransport;
 
 pub use poem;

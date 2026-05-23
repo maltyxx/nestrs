@@ -50,6 +50,7 @@ dependencies = [
  "nestrs-health",
  "nestrs-http",
  "nestrs-middleware",
+ "nestrs-pipes",
  "nestrs-server-timing",
  "nestrs-telemetry",
  "poem",
@@ -1408,6 +1409,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "figment",
+ "inventory",
  "nestrs-macros",
  "serde",
  "thiserror",
@@ -1467,10 +1469,13 @@ dependencies = [
  "nestrs-core",
  "nestrs-http-macros",
  "nestrs-middleware",
+ "nestrs-pipes",
  "poem",
+ "serde_json",
  "tokio",
  "tokio-util",
  "tracing",
+ "validator",
 ]
 
 [[package]]
@@ -1529,6 +1534,16 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "poem",
+]
+
+[[package]]
+name = "nestrs-pipes"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "thiserror",
+ "uuid",
+ "validator",
 ]
 
 [[package]]

@@ -113,6 +113,46 @@ exception to this runtime merge: `#[field]` lowers to async-graphql's native
 `#[ComplexObject]`, so its fields attach to their type statically — no
 registry, no roots.
 
+## Lifecycle hooks self-register through the same registry
+
+The application lifecycle events (NestJS's `onModuleInit`,
+`onApplicationBootstrap`, `onModuleDestroy`, `beforeApplicationShutdown`,
+`onApplicationShutdown`) attach to a provider that already owns its single
+`impl Discoverable`, and a type gets exactly one — so they **cannot** ride the
+discovery-metadata path. Instead `#[hooks]` on a provider's impl block submits
+each phase-tagged method (`#[on_module_init]`, …) to the same link-time
+`inventory` registry GraphQL composition uses; `App::run` drains it per phase,
+resolving the provider from the container (the instance request handlers share)
+and awaiting the hook. Hooks are therefore **per-provider, not per-module**, and
+run in `(provider, method)` name order within a phase — link order is unstable,
+and cross-provider init ordering is not expressed (a hook needing another
+service injects it). Init phases run after `configure`, before serving, and a
+failure aborts boot; shutdown phases run after the transports stop, best-effort.
+
+## Pipes are a transport-agnostic crate, applied at the surface boundary
+
+NestJS pipes (validation + transformation of a handler parameter) are **not** an
+HTTP concern — they live in `nestrs-pipes`, a pure crate with no transport or
+container dependency, **one `Pipe` per file**. The `Pipe` trait is stateless
+(`transform(In) -> Result<Out, PipeError>`, an associated fn — a pipe is a
+zero-sized marker named at a call site, never a DI provider, so no decorator
+macro is needed). The base set maps NestJS: `Parse<T>` (+ `ParseInt`/`Float`/
+`Bool` aliases, and any `FromStr` enum — covering `ParseEnumPipe`),
+`ParseUuid`/`ParseUuidVersion<V>`, `ParseArray<T>`, `Trim`/`Lowercase`/
+`Uppercase`, and `ValidationPipe<T>` (runs `validator`).
+`DefaultValuePipe`/`ParseFilePipe`/`ParseDatePipe` are intentionally absent —
+the crate docs give the Rust-idiomatic replacement for each.
+
+A *surface* binds a pipe to a parameter. HTTP does it with two poem extractors
+in `nestrs-http` (the only HTTP-specific part): `Valid<E>` (e.g.
+`Valid<Json<T>>`) runs validation, `Piped<P, E>` applies a transform — both
+reject with the `PipeError` rendered as a JSON 400 before the handler runs.
+Typed extractors (`Path<u32>`) already cover plain parses, so there is no
+`ParseIntPipe` extractor. Reusable pipes are framework primitives — never define
+one in an app. (Aside: poem rejects two `.at(path, …)` for one path, so
+`#[routes]` collapses several verbs on a path into a single `RouteMethod`,
+letting a collection controller hold `GET` and `POST /users`.)
+
 ## Naming rules — strict
 
 - Applications live under `apps/<name>/`. Not `examples/`, not `services/`.

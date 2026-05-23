@@ -11,6 +11,7 @@ nestrs-graphql-cli.workspace = true
 nestrs-health.workspace = true
 nestrs-http.workspace = true
 nestrs-middleware.workspace = true
+nestrs-pipes.workspace = true
 nestrs-server-timing.workspace = true
 nestrs-telemetry.workspace = true
 poem.workspace = true

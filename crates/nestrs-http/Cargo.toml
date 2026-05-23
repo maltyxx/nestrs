@@ -11,6 +11,12 @@ description = "HTTP transport for nestrs: HttpTransport, Controller trait and Ht
 nestrs-core.workspace = true
 nestrs-http-macros.workspace = true
 nestrs-middleware.workspace = true
+# The pipes themselves are transport-agnostic; this crate only adapts them to
+# poem (the `Valid`/`Piped` extractors). `validator` is needed for the `Validate`
+# bound on `Valid`; `serde_json` renders a `PipeError` as a JSON 400.
+nestrs-pipes.workspace = true
+validator.workspace = true
+serde_json.workspace = true
 poem.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

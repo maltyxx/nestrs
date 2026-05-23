@@ -134,7 +134,10 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
     let self_ty = item.self_ty.clone();
 
     let mut wrappers: Vec<TokenStream2> = Vec::new();
-    let mut route_entries: Vec<TokenStream2> = Vec::new();
+    // Verbs grouped by path, in first-seen order. poem rejects two `.at(path,..)`
+    // for the same path, so several verbs on one path (REST `GET`+`POST /users`)
+    // must collapse into a single `RouteMethod` (`get(h1).post(h2)`).
+    let mut routes_by_path: Vec<(LitStr, Vec<(syn::Ident, syn::Ident)>)> = Vec::new();
     let mut route_metas: Vec<TokenStream2> = Vec::new();
 
     for impl_item in item.items.iter_mut() {
@@ -192,9 +195,16 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
             }
         });
 
-        route_entries.push(quote! {
-            .at(#route_path, ::poem::#verb_ident(#wrapper_name))
-        });
+        match routes_by_path
+            .iter_mut()
+            .find(|(path, _)| path.value() == route_path.value())
+        {
+            Some((_, verbs)) => verbs.push((verb_ident.clone(), wrapper_name.clone())),
+            None => routes_by_path.push((
+                route_path.clone(),
+                vec![(verb_ident.clone(), wrapper_name.clone())],
+            )),
+        }
 
         let verb_variant = match verb_ident.to_string().as_str() {
             "get" => quote!(::nestrs_http::HttpVerb::Get),
@@ -213,6 +223,22 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
             }
         });
     }
+
+    // One `.at(path, RouteMethod)` per path: the first verb opens the
+    // `RouteMethod`, the rest chain onto it (`get(h1).post(h2)`).
+    let route_entries: Vec<TokenStream2> = routes_by_path
+        .iter()
+        .map(|(path, verbs)| {
+            let mut verbs = verbs.iter();
+            let (first_verb, first_wrapper) =
+                verbs.next().expect("each path has at least one verb");
+            let mut method = quote! { ::poem::#first_verb(#first_wrapper) };
+            for (verb, wrapper) in verbs {
+                method = quote! { #method.#verb(#wrapper) };
+            }
+            quote! { .at(#path, #method) }
+        })
+        .collect();
 
     quote! {
         #item

@@ -1,5 +1,5 @@
 use async_graphql::{InputObject, SimpleObject};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::users::entity::User;
@@ -22,7 +22,7 @@ impl From<&User> for UserDto {
     }
 }
 
-#[derive(Debug, Clone, InputObject, Validate)]
+#[derive(Debug, Clone, Deserialize, InputObject, Validate)]
 pub struct CreateUserInput {
     #[validate(length(min = 1))]
     pub name: String,
