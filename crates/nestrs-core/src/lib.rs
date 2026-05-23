@@ -8,7 +8,7 @@ pub mod lifecycle;
 pub mod module;
 pub mod transport;
 
-pub use app::App;
+pub use app::{App, AppBuilder};
 pub use container::{Container, ContainerBuilder};
 pub use discoverable::Discoverable;
 pub use discovery::{Discovered, DiscoveryService};

@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use nestrs_core::injectable;
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::weather::config::WeatherConfig;
 use crate::weather::dto::WeatherReport;
 
 #[derive(Debug, Error)]
@@ -19,17 +22,24 @@ pub trait WeatherProvider: Send + Sync + 'static {
     async fn current(&self, latitude: f64, longitude: f64) -> Result<WeatherReport, WeatherError>;
 }
 
+/// Open-Meteo client. The HTTP client is built once at boot by a
+/// `provide_factory` (timeout-configured from [`WeatherConfig`]) and injected,
+/// rather than constructed here — so the timeout is configurable and the client
+/// is shared. The base URL comes from the same injected config.
 #[injectable]
-#[derive(Default)]
 pub struct OpenMeteoClient {
-    http: reqwest::Client,
+    #[inject]
+    http: Arc<reqwest::Client>,
+    #[inject]
+    config: Arc<WeatherConfig>,
 }
 
 #[async_trait]
 impl WeatherProvider for OpenMeteoClient {
     async fn current(&self, latitude: f64, longitude: f64) -> Result<WeatherReport, WeatherError> {
         let url = format!(
-            "https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true"
+            "{}?latitude={latitude}&longitude={longitude}&current_weather=true",
+            self.config.base_url
         );
         let payload: OpenMeteoResponse = self
             .http
