@@ -4,6 +4,7 @@ pub mod container;
 pub mod discoverable;
 pub mod discovery;
 pub mod error;
+pub mod lifecycle;
 pub mod module;
 pub mod transport;
 
@@ -12,7 +13,12 @@ pub use container::{Container, ContainerBuilder};
 pub use discoverable::Discoverable;
 pub use discovery::{Discovered, DiscoveryService};
 pub use error::{Error, Result};
+pub use lifecycle::{LifecycleHook, LifecyclePhase};
 pub use module::Module;
 pub use transport::Transport;
 
-pub use nestrs_macros::{injectable, module};
+// Re-exported so `#[hooks]`-generated `inventory::submit!` resolves through the
+// framework — apps never depend on `inventory` directly.
+pub use inventory;
+
+pub use nestrs_macros::{hooks, injectable, module};

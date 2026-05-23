@@ -17,6 +17,9 @@ tokio-util.workspace = true
 async-trait.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
+# Link-time registry: each `#[hooks]` method submits a lifecycle hook so `App`
+# composes them at boot with no central list (same mechanism as GraphQL).
+inventory.workspace = true
 
 [dev-dependencies]
 figment = { workspace = true, features = ["test"] }

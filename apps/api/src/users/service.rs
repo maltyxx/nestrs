@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use anyhow::{anyhow, Result};
-use nestrs_core::injectable;
+use nestrs_core::{hooks, injectable};
 use nestrs_graphql::dataloader;
 use uuid::{Uuid, Variant, Version};
 use validator::Validate;
@@ -77,6 +77,30 @@ impl UsersService {
             }
         }
         buckets
+    }
+}
+
+// Lifecycle hooks (NestJS-style), self-registered via `#[hooks]`. `App` resolves
+// this service from the container — the same instance the resolver and
+// controller use — and invokes them at boot and shutdown.
+#[hooks]
+impl UsersService {
+    #[on_module_init]
+    async fn seed(&self) -> Result<()> {
+        self.create(CreateUserInput {
+            name: "Ada Lovelace".into(),
+            email: "ada@example.com".into(),
+        })
+        .await?;
+        tracing::info!(target: "nestrs::lifecycle", "seeded the initial user");
+        Ok(())
+    }
+
+    #[on_application_shutdown]
+    async fn report(&self) -> Result<()> {
+        let count = self.list().await.len();
+        tracing::info!(target: "nestrs::lifecycle", count, "users present at shutdown");
+        Ok(())
     }
 }
 

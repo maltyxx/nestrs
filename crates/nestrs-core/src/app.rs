@@ -3,6 +3,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
 use crate::container::Container;
+use crate::lifecycle::{run_phase, run_phase_lenient, LifecyclePhase};
 use crate::module::Module;
 use crate::transport::Transport;
 
@@ -47,9 +48,10 @@ impl App {
         self
     }
 
-    /// Configure each transport against the container, then run all of them
-    /// concurrently. SIGINT / SIGTERM signals cancel the shared token; the
-    /// first transport that errors also cancels the others.
+    /// Configure each transport against the container, run the init lifecycle
+    /// hooks, then run all transports concurrently. SIGINT / SIGTERM cancels the
+    /// shared token; the first transport that errors also cancels the others.
+    /// Once the transports have stopped, the shutdown lifecycle hooks run.
     pub async fn run(self) -> Result<()> {
         let App {
             container,
@@ -59,6 +61,11 @@ impl App {
         for t in transports.iter_mut() {
             t.configure(&container).await?;
         }
+
+        // Init phases run after wiring, before serving. A failure here aborts
+        // the boot — nothing is listening yet, so there is nothing to tear down.
+        run_phase(&container, LifecyclePhase::OnModuleInit).await?;
+        run_phase(&container, LifecyclePhase::OnApplicationBootstrap).await?;
 
         let cancel = CancellationToken::new();
         spawn_shutdown_signal(cancel.clone());
@@ -87,6 +94,12 @@ impl App {
                 }
             }
         }
+
+        // Shutdown phases run after the transports have stopped, best-effort, so
+        // every provider's cleanup runs even if one fails or a transport errored.
+        run_phase_lenient(&container, LifecyclePhase::OnModuleDestroy).await;
+        run_phase_lenient(&container, LifecyclePhase::BeforeApplicationShutdown).await;
+        run_phase_lenient(&container, LifecyclePhase::OnApplicationShutdown).await;
 
         match first_err {
             Some(e) => Err(e),

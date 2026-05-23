@@ -32,6 +32,24 @@ pub fn parse_path_arg(args: TokenStream2, attr: &str) -> syn::Result<LitStr> {
     parser.parse2(args)
 }
 
+/// The base ident of an impl block's self type — the last path segment of
+/// `impl Foo` / `impl path::to::Foo`. The impl-block decorators (`#[routes]`,
+/// `#[resolver]`, `#[dataloader]`, `#[hooks]`) need it to name generated items
+/// and to reject a non-path self type. `decorator` names the caller for the
+/// error message.
+pub fn impl_self_ident(self_ty: &Type, decorator: &str) -> syn::Result<Ident> {
+    match self_ty {
+        Type::Path(tp) => tp.path.segments.last().map(|seg| seg.ident.clone()),
+        _ => None,
+    }
+    .ok_or_else(|| {
+        syn::Error::new_spanned(
+            self_ty,
+            format!("{decorator} requires a simple struct path (e.g. `impl MyService`)"),
+        )
+    })
+}
+
 /// If `ty` syntactically matches `Arc<Inner>`, return `Inner`. Only the last
 /// path segment is inspected (`std::sync::Arc<T>` works as well as `Arc<T>`).
 fn arc_inner(ty: &Type) -> Option<&Type> {

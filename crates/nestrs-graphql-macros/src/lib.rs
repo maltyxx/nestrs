@@ -24,7 +24,7 @@ use syn::{
 
 use nestrs_macro_support::{
     build_injectable_body, forwarded_arg_idents, forwarded_idents, from_container_method,
-    InjectableBody,
+    impl_self_ident, InjectableBody,
 };
 
 /// Mark a GraphQL resolver.
@@ -106,17 +106,9 @@ pub fn dataloader(args: TokenStream, input: TokenStream) -> TokenStream {
 /// `#[dataloader]` on an impl: one generated `Loader` per method.
 fn dataloader_impl(item: ItemImpl) -> TokenStream {
     let self_ty = item.self_ty.clone();
-    let base = match &*self_ty {
-        Type::Path(tp) => tp.path.segments.last().map(|s| s.ident.clone()),
-        _ => None,
-    };
-    let Some(base) = base else {
-        return syn::Error::new_spanned(
-            &self_ty,
-            "#[dataloader] needs a simple struct path (e.g. `impl UsersService`)",
-        )
-        .to_compile_error()
-        .into();
+    let base = match impl_self_ident(&self_ty, "#[dataloader]") {
+        Ok(base) => base,
+        Err(err) => return err.to_compile_error().into(),
     };
 
     let mut loaders: Vec<TokenStream2> = Vec::new();
@@ -350,17 +342,9 @@ fn resolver_struct(mut item: ItemStruct) -> TokenStream {
 fn resolver_impl(mut item: ItemImpl) -> TokenStream {
     let self_ty = item.self_ty.clone();
 
-    let base = match &*self_ty {
-        Type::Path(tp) => tp.path.segments.last().map(|s| s.ident.clone()),
-        _ => None,
-    };
-    let Some(base) = base else {
-        return syn::Error::new_spanned(
-            &self_ty,
-            "#[resolver] on an impl requires a simple struct path (e.g. `impl UsersResolver`)",
-        )
-        .to_compile_error()
-        .into();
+    let base = match impl_self_ident(&self_ty, "#[resolver]") {
+        Ok(base) => base,
+        Err(err) => return err.to_compile_error().into(),
     };
 
     let query_obj = format_ident!("__{}Query", base);
