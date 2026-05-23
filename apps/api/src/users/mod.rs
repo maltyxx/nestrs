@@ -1,6 +1,7 @@
 pub mod controller;
 pub mod dto;
 pub mod entity;
+pub mod job;
 pub mod module;
 pub mod resolver;
 pub mod service;

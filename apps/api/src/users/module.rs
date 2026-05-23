@@ -1,14 +1,16 @@
 use nestrs_core::module;
 
 use crate::users::controller::UsersController;
+use crate::users::job::UserCountReport;
 use crate::users::service::UsersService;
 
-// The module wires the service and its HTTP controller. The resolver
-// self-registers (`#[resolver]`), and its DataLoaders self-register too
-// (`#[dataloader]` in service.rs, folded into the container by GraphqlModule) —
-// so neither is listed here. The service's lifecycle hooks (`#[hooks]`) likewise
-// self-register, via the link-time registry `App` drains at boot.
-#[module(providers = [UsersService, UsersController])]
+// The module wires the service, its HTTP controller, and the `UserCountReport`
+// cron job. The resolver self-registers (`#[resolver]`), and its DataLoaders
+// self-register too (`#[dataloader]` in service.rs, folded into the container by
+// GraphqlModule) — so neither is listed here. The service's lifecycle hooks
+// (`#[hooks]`) likewise self-register, via the link-time registry `App` drains at
+// boot.
+#[module(providers = [UsersService, UsersController, UserCountReport])]
 pub struct UsersModule;
 
 #[cfg(test)]

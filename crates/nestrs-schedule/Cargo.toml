@@ -1,0 +1,17 @@
+[package]
+name = "nestrs-schedule"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Discovered cron-style scheduled jobs for nestrs: the #[cron_job] decorator plus a Scheduler transport."
+
+[dependencies]
+nestrs-core.workspace = true
+nestrs-schedule-macros.workspace = true
+async-trait.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true

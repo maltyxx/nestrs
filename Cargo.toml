@@ -94,6 +94,8 @@ nestrs-mcp = { path = "crates/nestrs-mcp" }
 nestrs-mcp-macros = { path = "crates/nestrs-mcp-macros" }
 nestrs-middleware = { path = "crates/nestrs-middleware" }
 nestrs-pipes = { path = "crates/nestrs-pipes" }
+nestrs-schedule = { path = "crates/nestrs-schedule" }
+nestrs-schedule-macros = { path = "crates/nestrs-schedule-macros" }
 nestrs-server-timing = { path = "crates/nestrs-server-timing" }
 nestrs-telemetry = { path = "crates/nestrs-telemetry" }
 

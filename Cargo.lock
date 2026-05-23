@@ -51,6 +51,7 @@ dependencies = [
  "nestrs-http",
  "nestrs-middleware",
  "nestrs-pipes",
+ "nestrs-schedule",
  "nestrs-server-timing",
  "nestrs-telemetry",
  "poem",
@@ -1544,6 +1545,29 @@ dependencies = [
  "thiserror",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "nestrs-schedule"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "nestrs-core",
+ "nestrs-schedule-macros",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "nestrs-schedule-macros"
+version = "0.1.0"
+dependencies = [
+ "nestrs-macro-support",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
