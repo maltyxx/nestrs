@@ -98,10 +98,12 @@ dependencies = [
  "nestrs-health",
  "nestrs-http",
  "nestrs-middleware",
+ "nestrs-openapi",
  "nestrs-pipes",
  "nestrs-server-timing",
  "nestrs-telemetry",
  "poem",
+ "schemars",
  "serde",
  "thiserror",
  "tokio",
@@ -1547,6 +1549,7 @@ dependencies = [
  "nestrs-middleware",
  "nestrs-pipes",
  "poem",
+ "schemars",
  "serde_json",
  "tokio",
  "tokio-util",
@@ -1610,6 +1613,17 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "poem",
+]
+
+[[package]]
+name = "nestrs-openapi"
+version = "0.1.0"
+dependencies = [
+ "nestrs-core",
+ "nestrs-http",
+ "poem",
+ "schemars",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,10 +1,13 @@
 use async_graphql::{InputObject, SimpleObject};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::users::entity::User;
 
-#[derive(Debug, Clone, Serialize, SimpleObject)]
+// `JsonSchema` feeds the OpenAPI document (`OpenApiModule`) the same way
+// `SimpleObject`/`InputObject` feed the GraphQL schema — one derive per surface.
+#[derive(Debug, Clone, Serialize, SimpleObject, JsonSchema)]
 #[graphql(complex)]
 pub struct UserDto {
     pub id: String,
@@ -22,7 +25,7 @@ impl From<&User> for UserDto {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, InputObject, Validate)]
+#[derive(Debug, Clone, Deserialize, InputObject, Validate, JsonSchema)]
 pub struct CreateUserInput {
     #[validate(length(min = 1))]
     pub name: String,

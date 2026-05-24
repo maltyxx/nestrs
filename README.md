@@ -92,8 +92,11 @@ Started with `just dev api`. Listens on `http://0.0.0.0:3002`:
 
 | Endpoint | Purpose |
 |----------|---------|
+| `GET  /users`, `GET /users/:id`, `POST /users` | REST resource |
 | `POST /graphql` | GraphQL endpoint |
 | `GET  /graphql` | GraphQL playground |
+| `GET  /api-json` | OpenAPI 3.1 document |
+| `GET  /api` | Swagger UI |
 | `GET  /health/live` | Kubernetes liveness probe |
 | `GET  /health/ready` | Kubernetes readiness probe |
 | `GET  /health/startup` | Kubernetes startup probe |
@@ -106,6 +109,14 @@ resolver in the binary (no central list) and is committed as SDL at
 [`apps/api/schema.graphql`](apps/api/schema.graphql), so API changes surface in
 diffs. Run `just graphql-schema` after touching a resolver; `just
 graphql-schema-check` guards against drift in CI.
+
+The REST surface documents itself the same way: import `OpenApiModule` and the
+OpenAPI document composes from every `#[controller]` in the binary — verbs and
+paths from the route table, request/response schemas from each `Json<T>` payload
+(DTOs derive `schemars::JsonSchema`, the same trait MCP uses), grouped by
+controller. `#[api(summary = "...", tags("..."))]` beside a verb enriches an
+operation (NestJS's `@ApiOperation`/`@ApiTags`). Swagger UI is bundled and served
+offline at `/api` (the document at `/api-json`), matching NestJS's default paths.
 
 It also exercises the request pipeline: `POST /users` is protected by an
 `#[injectable]` `ApiKeyGuard` bound with `#[use_guards]` (send an `x-api-key`

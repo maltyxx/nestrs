@@ -30,13 +30,18 @@ mod pipe;
 mod transport;
 
 pub use context::Ctx;
-pub use controller::{Controller, HttpControllerMeta, HttpRouteMeta, HttpVerb};
+pub use controller::{schema_of, Controller, HttpControllerMeta, HttpRouteMeta, HttpVerb, SchemaFn};
 pub use endpoint::HttpEndpointMeta;
 pub use interceptor::HttpInterceptorMeta;
 pub use pipe::{IntoInner, Piped, Valid};
-pub use transport::HttpTransport;
+pub use transport::{join_path, HttpTransport};
 
 pub use poem;
+
+// Re-exported so `#[routes]`-generated schema-capture code names `schemars`
+// through the framework (`::nestrs_http::schemars::…`), and so apps can derive
+// `nestrs_http::schemars::JsonSchema` on their DTOs without a direct dependency.
+pub use schemars;
 
 // `#[routes]`-generated code names `::nestrs_http::EndpointExt` to wrap a
 // `#[use_guards]` handler, and a guard is written `#[nestrs_http::async_trait]

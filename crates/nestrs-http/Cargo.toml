@@ -17,6 +17,12 @@ nestrs-middleware.workspace = true
 nestrs-pipes.workspace = true
 validator.workspace = true
 serde_json.workspace = true
+# `#[routes]` captures the JSON schema of each `Json<T>` payload into
+# `HttpRouteMeta` so an OpenAPI generator (nestrs-openapi) can read it. schemars
+# does the schema derivation — the same crate (and `JsonSchema` derive) that MCP
+# tool parameters already use. Re-exported below so macro-generated
+# `::nestrs_http::schemars::…` paths resolve at the call site.
+schemars.workspace = true
 poem.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

@@ -6,11 +6,15 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, FnArg, ImplItem, ItemImpl, ItemStruct, LitStr, Path, ReturnType};
+use syn::punctuated::Punctuated;
+use syn::{
+    parse_macro_input, Attribute, Expr, FnArg, ImplItem, ItemImpl, ItemStruct, Lit, LitStr, Meta,
+    Path, ReturnType, Token, Type,
+};
 
 use nestrs_macro_support::{
     build_injectable_body, dependencies_method, forwarded_arg_idents, from_container_method,
-    parse_named_str_arg, InjectableBody,
+    impl_self_ident, nth_generic_type, parse_named_str_arg, InjectableBody,
 };
 
 /// One route handler in a controller: its HTTP verb ident, the generated
@@ -136,6 +140,16 @@ pub fn interceptor(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// via `nestrs_http::Ctx<T>`. Like the verb attributes, `#[use_guards]` is
 /// consumed here and needs no import.
 ///
+/// Tag a method with `#[api(summary = "...", description = "...", tags("a",
+/// "b"))]` to enrich its OpenAPI operation (the analog of NestJS's
+/// `@ApiOperation` / `@ApiTags`); every field is optional and, like
+/// `#[use_guards]`, the attribute is consumed here. Independently, the macro
+/// reads each handler's signature and records the schema of any `Json<T>`
+/// request body or response into the route's [`HttpRouteMeta`], so an OpenAPI
+/// generator can describe the payloads with no extra annotation. `T` must
+/// implement `nestrs_http::schemars::JsonSchema` (handlers returning a raw
+/// `Response`/`String` carry no schema and need no such bound).
+///
 /// Emits two impls on the controller:
 /// - `nestrs_http::Controller` — the mount entry point used by the HTTP
 ///   transport.
@@ -147,6 +161,14 @@ pub fn interceptor(_args: TokenStream, input: TokenStream) -> TokenStream {
 pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = parse_macro_input!(input as ItemImpl);
     let self_ty = item.self_ty.clone();
+
+    // The controller struct name doubles as the default OpenAPI tag, so routes
+    // group by controller in the docs unless `#[api(tags(...))]` overrides it.
+    let ctrl_name = match impl_self_ident(&self_ty, "routes") {
+        Ok(name) => name,
+        Err(err) => return err.to_compile_error().into(),
+    };
+    let ctrl_tag = LitStr::new(&ctrl_name.to_string(), ctrl_name.span());
 
     let mut wrappers: Vec<TokenStream2> = Vec::new();
     // Verbs grouped by path, in first-seen order. poem rejects two `.at(path,..)`
@@ -248,11 +270,53 @@ pub fn routes(_args: TokenStream, input: TokenStream) -> TokenStream {
             _ => unreachable!("verb_ident filtered above"),
         };
 
+        // `#[api(summary = "...", tags(...))]` — optional OpenAPI metadata,
+        // consumed here like `#[use_guards]`. Absent fields fall back below.
+        let api = match method.attrs.iter().position(|a| a.path().is_ident("api")) {
+            Some(a_idx) => {
+                let a_attr = method.attrs.remove(a_idx);
+                match parse_api_attr(&a_attr) {
+                    Ok(api) => api,
+                    Err(err) => return err.to_compile_error().into(),
+                }
+            }
+            None => ApiMeta::default(),
+        };
+        let summary = opt_str(&api.summary);
+        let description = opt_str(&api.description);
+        let tags = if api.tags.is_empty() {
+            quote! { &[#ctrl_tag] }
+        } else {
+            let tags = &api.tags;
+            quote! { &[#(#tags),*] }
+        };
+
+        // Capture the JSON request body / response payload schemas. Each emits
+        // `schema_of::<T>` (a `JsonSchema` bound on `T`); a non-JSON payload
+        // emits `None` and imposes no bound.
+        let request_body = match request_payload(&inputs) {
+            Some(ty) => quote! {
+                ::core::option::Option::Some(::nestrs_http::schema_of::<#ty> as ::nestrs_http::SchemaFn)
+            },
+            None => quote! { ::core::option::Option::None },
+        };
+        let response = match response_payload(&method.sig.output) {
+            Some(ty) => quote! {
+                ::core::option::Option::Some(::nestrs_http::schema_of::<#ty> as ::nestrs_http::SchemaFn)
+            },
+            None => quote! { ::core::option::Option::None },
+        };
+
         route_metas.push(quote! {
             ::nestrs_http::HttpRouteMeta {
                 verb: #verb_variant,
                 path: #route_path,
                 handler: #method_name_lit,
+                summary: #summary,
+                description: #description,
+                tags: #tags,
+                request_body: #request_body,
+                response: #response,
             }
         });
     }
@@ -329,4 +393,102 @@ fn guarded_handler(wrapper: &syn::Ident, guards: &[Path]) -> TokenStream2 {
         };
     }
     expr
+}
+
+// -----------------------------------------------------------------------------
+// OpenAPI capture: `#[api(...)]` parsing and `Json<T>` payload-type extraction
+// -----------------------------------------------------------------------------
+
+/// Parsed `#[api(...)]` facets. Everything is optional; an empty attribute (or
+/// no attribute at all) leaves the route's OpenAPI defaults untouched.
+#[derive(Default)]
+struct ApiMeta {
+    summary: Option<LitStr>,
+    description: Option<LitStr>,
+    tags: Vec<LitStr>,
+}
+
+/// Parse `#[api(summary = "...", description = "...", tags("a", "b"))]`.
+fn parse_api_attr(attr: &Attribute) -> syn::Result<ApiMeta> {
+    let mut out = ApiMeta::default();
+    let metas = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
+    for meta in metas {
+        match meta {
+            Meta::NameValue(nv) if nv.path.is_ident("summary") => {
+                out.summary = Some(expr_str(&nv.value)?);
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("description") => {
+                out.description = Some(expr_str(&nv.value)?);
+            }
+            Meta::List(list) if list.path.is_ident("tags") => {
+                out.tags = list
+                    .parse_args_with(Punctuated::<LitStr, Token![,]>::parse_terminated)?
+                    .into_iter()
+                    .collect();
+            }
+            other => {
+                return Err(syn::Error::new_spanned(
+                    other,
+                    "#[api] accepts `summary = \"...\"`, `description = \"...\"`, and \
+                     `tags(\"a\", \"b\")`",
+                ))
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// A `key = "..."` value must be a string literal.
+fn expr_str(expr: &Expr) -> syn::Result<LitStr> {
+    match expr {
+        Expr::Lit(syn::ExprLit {
+            lit: Lit::Str(s), ..
+        }) => Ok(s.clone()),
+        other => Err(syn::Error::new_spanned(other, "expected a string literal")),
+    }
+}
+
+/// `Some(lit)` → `Some("lit")` tokens, `None` → `None` tokens.
+fn opt_str(value: &Option<LitStr>) -> TokenStream2 {
+    match value {
+        Some(lit) => quote! { ::core::option::Option::Some(#lit) },
+        None => quote! { ::core::option::Option::None },
+    }
+}
+
+/// The JSON payload type behind an extractor parameter: `Json<T>`,
+/// `Valid<Json<T>>`, and `Piped<_, Json<T>>` all yield `T`. Anything that does
+/// not bottom out in `Json<…>` (a `Path<…>`, a `Ctx<…>`) yields `None`.
+fn json_payload(ty: &Type) -> Option<Type> {
+    if let Some(t) = nth_generic_type(ty, "Json", 0) {
+        return Some(t.clone());
+    }
+    if let Some(inner) = nth_generic_type(ty, "Valid", 0) {
+        return json_payload(inner);
+    }
+    if let Some(inner) = nth_generic_type(ty, "Piped", 1) {
+        return json_payload(inner);
+    }
+    None
+}
+
+/// The first request-body payload among a handler's value parameters (the
+/// receiver is already stripped before this is called).
+fn request_payload(inputs: &[FnArg]) -> Option<Type> {
+    inputs.iter().find_map(|arg| match arg {
+        FnArg::Typed(pt) => json_payload(&pt.ty),
+        _ => None,
+    })
+}
+
+/// The JSON payload type of a handler's return, if any: strips one optional
+/// `Result<…>` then a `Json<…>`. `Json<Vec<UserDto>>` and `Result<Json<UserDto>>`
+/// both resolve to the type inside `Json<…>` (`Vec<UserDto>` / `UserDto`); a
+/// non-JSON return (`Response`, `String`) yields `None`.
+fn response_payload(output: &ReturnType) -> Option<Type> {
+    let ReturnType::Type(_, ty) = output else {
+        return None;
+    };
+    let inner = nth_generic_type(ty, "Result", 0).unwrap_or(ty);
+    nth_generic_type(inner, "Json", 0).cloned()
 }

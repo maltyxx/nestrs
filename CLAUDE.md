@@ -243,6 +243,41 @@ one in an app. (Aside: poem rejects two `.at(path, …)` for one path, so
 `#[routes]` collapses several verbs on a path into a single `RouteMethod`,
 letting a collection controller hold `GET` and `POST /users`.)
 
+## OpenAPI documents itself from the route table
+
+`nestrs-openapi` is the REST analog of `nestrs-graphql`: import `OpenApiModule`
+and it self-mounts (via `HttpEndpointMeta`, like `GraphqlModule`) `GET /api-json`
+(the OpenAPI 3.1 document) plus a **bundled, offline** Swagger UI at `GET /api` —
+the NestJS-convention paths, since the OpenAPI spec mandates none. The
+document is **composed, not listed** — it reads the same `HttpControllerMeta`s
+the transport mounts, so every `#[controller]` in the binary appears with no
+central registry. Swagger UI assets are vendored under
+`crates/nestrs-openapi/assets/` (pinned `swagger-ui-dist`) and embedded with
+`include_bytes!`; no CDN, no app-facing utoipa/poem-openapi dependency.
+
+Paths and verbs are free from the route table; the missing piece — payload
+**types** — is captured in `#[routes]`, the only place they are visible. It
+records, per route, a `schema_of::<T>` fn-pointer for any `Json<T>` request body
+or response (peeling `Result`/`Valid`/`Piped` wrappers; `Vec`/`Option` are left
+to schemars), into `HttpRouteMeta`. The schema layer is **schemars**, not a new
+dependency: DTOs derive `schemars::JsonSchema` exactly as they derive async-
+graphql's `SimpleObject` for GraphQL or as MCP tool params already do — one
+derive per surface. The one new contract: **a `Json<T>` payload's `T` must
+implement `JsonSchema`** (handlers returning a raw `Response`/`String` capture no
+schema and need no bound). `nestrs-openapi` drives a single 2020-12 generator
+(`SchemaSettings::draft2020_12()` with `definitions_path` repointed to
+`/components/schemas`) across all routes — 2020-12 *is* the OpenAPI 3.1 schema
+dialect, so no `nullable`/single-type rewriting is needed and `$ref`s resolve
+under `components/schemas`.
+
+`#[api(summary = "...", description = "...", tags("..."))]` beside a verb
+attribute enriches an operation (NestJS's `@ApiOperation`/`@ApiTags`); it is
+consumed by `#[routes]` like `#[use_guards]`, needs no import, and every field is
+optional — the default tag is the controller struct name, so routes group by
+controller. Not yet built (deliberate, noted in the crate): query-param schemas,
+path-param *types* (emitted as `string`), security schemes, and a committed
+`openapi.json` snapshot + drift-check mirroring `just graphql-schema`.
+
 ## Naming rules — strict
 
 - Applications live under `apps/<name>/`. Not `examples/`, not `services/`.

@@ -19,11 +19,13 @@ pub struct UsersController {
 #[routes]
 impl UsersController {
     #[get("/")]
+    #[api(summary = "List users", tags("Users"))]
     async fn list(&self) -> Json<Vec<UserDto>> {
         Json(self.svc.list().await)
     }
 
     #[get("/:id")]
+    #[api(summary = "Fetch a user by id", tags("Users"))]
     async fn get(&self, id: Piped<ParseUuidV7, Path<String>>) -> Result<Json<UserDto>> {
         let id = id.into_inner();
         match self.svc.find(&id.to_string()).await {
@@ -38,6 +40,11 @@ impl UsersController {
 
     #[post("/")]
     #[use_guards(ApiKeyGuard)]
+    #[api(
+        summary = "Create a user",
+        description = "Requires the `x-api-key` header.",
+        tags("Users")
+    )]
     async fn create(
         &self,
         caller: Ctx<Caller>,

@@ -1,0 +1,144 @@
+//! Assemble an OpenAPI 3.1 document from the discovered HTTP controllers.
+
+use nestrs_core::{Container, DiscoveryService};
+use nestrs_http::{join_path, HttpControllerMeta, HttpRouteMeta};
+use schemars::generate::SchemaSettings;
+use schemars::SchemaGenerator;
+use serde_json::{json, Map, Value};
+
+/// Build the OpenAPI document for everything mounted on the HTTP transport.
+///
+/// Called once at the transport's `configure` step, when the container is fully
+/// assembled, so it sees every controller. It reads the same
+/// [`HttpControllerMeta`]s the transport mounts and drives a single
+/// [`SchemaGenerator`] across all routes so every `Json<T>` payload contributes
+/// its definitions to a shared `components/schemas`.
+pub fn build_document(container: &Container, title: &str, version: &str) -> Value {
+    let discovery = DiscoveryService::new(container);
+    // OpenAPI 3.1 schema objects *are* JSON Schema 2020-12, so we use schemars'
+    // 2020-12 dialect (no `nullable`/single-type rewrites — those are the 3.0
+    // `openapi3()` transforms we explicitly do not want) and only relocate
+    // `$ref`s from the default `#/$defs/...` to `#/components/schemas/...`.
+    let mut settings = SchemaSettings::draft2020_12();
+    settings.definitions_path = "/components/schemas".into();
+    let mut generator = settings.into_generator();
+
+    let mut paths: Map<String, Value> = Map::new();
+    for controller in discovery.meta::<HttpControllerMeta>() {
+        for route in &controller.meta.routes {
+            let full = join_path(controller.meta.path, route.path);
+            let operation = operation_object(route, &path_parameters(&full), &mut generator);
+            let item = paths
+                .entry(openapi_path(&full))
+                .or_insert_with(|| Value::Object(Map::new()));
+            if let Value::Object(methods) = item {
+                methods.insert(route.verb.as_str().to_ascii_lowercase(), operation);
+            }
+        }
+    }
+
+    // Drain the schemas every `schema_of::<T>` recorded above.
+    let schemas = generator.take_definitions(true);
+
+    // 3.1.2 is the latest 3.1.x patch; its schema dialect is JSON Schema
+    // 2020-12, matching the generator above. (`jsonSchemaDialect` is omitted —
+    // 2020-12 is its default.)
+    json!({
+        "openapi": "3.1.2",
+        "info": { "title": title, "version": version },
+        "paths": Value::Object(paths),
+        "components": { "schemas": Value::Object(schemas) },
+    })
+}
+
+/// The OpenAPI operation object for one route: tags, optional summary /
+/// description, path parameters, the `Json<T>` request body and response.
+fn operation_object(
+    route: &HttpRouteMeta,
+    parameters: &[Value],
+    generator: &mut SchemaGenerator,
+) -> Value {
+    let mut op = Map::new();
+    op.insert("operationId".into(), json!(route.handler));
+    op.insert("tags".into(), json!(route.tags));
+    if let Some(summary) = route.summary {
+        op.insert("summary".into(), json!(summary));
+    }
+    if let Some(description) = route.description {
+        op.insert("description".into(), json!(description));
+    }
+    if !parameters.is_empty() {
+        op.insert("parameters".into(), Value::Array(parameters.to_vec()));
+    }
+    if let Some(schema_fn) = route.request_body {
+        op.insert(
+            "requestBody".into(),
+            json!({
+                "required": true,
+                "content": { "application/json": { "schema": schema_fn(generator).to_value() } },
+            }),
+        );
+    }
+
+    let mut ok = Map::new();
+    // OpenAPI requires a response description; per-response text isn't modeled
+    // yet (a v1 non-goal), so emit the spec-mandated minimum, not the summary.
+    ok.insert("description".into(), json!("OK"));
+    if let Some(schema_fn) = route.response {
+        ok.insert(
+            "content".into(),
+            json!({ "application/json": { "schema": schema_fn(generator).to_value() } }),
+        );
+    }
+    op.insert("responses".into(), json!({ "200": Value::Object(ok) }));
+
+    Value::Object(op)
+}
+
+/// One `{name}` path parameter per `:name` segment, typed as `string` for now
+/// (the handler's `Path<T>` type is not yet threaded through — see the crate's
+/// v1 non-goals).
+fn path_parameters(path: &str) -> Vec<Value> {
+    path.split('/')
+        .filter_map(|seg| seg.strip_prefix(':'))
+        .map(|name| {
+            json!({
+                "name": name,
+                "in": "path",
+                "required": true,
+                "schema": { "type": "string" },
+            })
+        })
+        .collect()
+}
+
+/// poem path syntax (`/users/:id`) → OpenAPI syntax (`/users/{id}`).
+fn openapi_path(path: &str) -> String {
+    path.split('/')
+        .map(|seg| match seg.strip_prefix(':') {
+            Some(name) => format!("{{{name}}}"),
+            None => seg.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn joins_and_converts_paths() {
+        assert_eq!(join_path("/users", "/:id"), "/users/:id");
+        assert_eq!(openapi_path("/users/:id"), "/users/{id}");
+        assert_eq!(join_path("/", "/"), "/");
+    }
+
+    #[test]
+    fn derives_path_parameters() {
+        let params = path_parameters("/users/:id");
+        assert_eq!(params.len(), 1);
+        assert_eq!(params[0]["name"], "id");
+        assert_eq!(params[0]["in"], "path");
+    }
+}

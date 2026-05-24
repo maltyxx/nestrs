@@ -15,10 +15,11 @@ use crate::interceptor::HttpInterceptorMeta;
 
 type MountFn = Box<dyn Fn(&Container, Route) -> Route + Send + Sync>;
 
-/// Join a controller prefix with a route path the way `poem`'s nesting does,
-/// for the boot route log: `("/health", "/live") -> "/health/live"`,
-/// `("/", "/") -> "/"`.
-fn join_path(prefix: &str, rest: &str) -> String {
+/// Join a controller prefix with a route path the way `poem`'s nesting does:
+/// `("/health", "/live") -> "/health/live"`, `("/", "/") -> "/"`. Public so the
+/// OpenAPI document (`nestrs-openapi`) composes paths identically to how this
+/// transport mounts them — the two must not drift.
+pub fn join_path(prefix: &str, rest: &str) -> String {
     let p = prefix.trim_end_matches('/');
     let r = rest.trim_start_matches('/');
     match (p.is_empty(), r.is_empty()) {

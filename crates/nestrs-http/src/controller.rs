@@ -35,12 +35,45 @@ impl HttpVerb {
     }
 }
 
-/// Declarative description of a single handler inside a controller.
-#[derive(Clone, Debug)]
+/// Builds the schema for a `Json<T>` request body or response, recording any
+/// named component schemas in the shared generator and returning either an
+/// inline schema or a `$ref` into `components/schemas`. `#[routes]` emits one
+/// (`schema_of::<T>`) per JSON payload it finds; a handler whose body/return is
+/// not `Json<…>` (a raw `Response`, `String`, `StatusCode`, …) carries `None`
+/// and imposes no `JsonSchema` bound.
+pub type SchemaFn = fn(&mut schemars::SchemaGenerator) -> schemars::Schema;
+
+/// The [`SchemaFn`] the `#[routes]` macro instantiates for a payload type `T`.
+/// Kept here so the macro emits `::nestrs_http::schema_of::<T>` and never names
+/// `schemars`' generator API itself.
+pub fn schema_of<T: schemars::JsonSchema>(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    generator.subschema_for::<T>()
+}
+
+/// Declarative description of a single handler inside a controller. Beyond the
+/// verb/path/handler the transport needs to mount it, it carries the optional
+/// OpenAPI facets the `#[routes]` macro extracts — `#[api(...)]` metadata and
+/// the request/response payload schemas — so a documentation generator
+/// (nestrs-openapi) can build a spec from discovery alone. Fn-pointer fields
+/// are why this type is not `Debug`.
+#[derive(Clone)]
 pub struct HttpRouteMeta {
     pub verb: HttpVerb,
     pub path: &'static str,
     pub handler: &'static str,
+    /// `#[api(summary = "...")]`, else `None`.
+    pub summary: Option<&'static str>,
+    /// `#[api(description = "...")]`, else `None`.
+    pub description: Option<&'static str>,
+    /// `#[api(tags(...))]`, else a single-element slice holding the controller
+    /// struct name — so routes group by controller in the docs by default.
+    pub tags: &'static [&'static str],
+    /// Schema of the JSON request body, when the handler takes `Json<T>` /
+    /// `Valid<Json<T>>` / `Piped<_, Json<T>>`.
+    pub request_body: Option<SchemaFn>,
+    /// Schema of the JSON response, when the handler returns `Json<T>`
+    /// (optionally wrapped in `Result<…>`).
+    pub response: Option<SchemaFn>,
 }
 
 type MountFn = dyn Fn(&Container, Route) -> Route + Send + Sync;

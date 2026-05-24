@@ -79,6 +79,28 @@ fn arc_dyn_inner(ty: &Type) -> Option<&Type> {
     matches!(inner, Type::TraitObject(_)).then_some(inner)
 }
 
+/// The `idx`-th generic type argument of `ty` when its last path segment is
+/// `name<...>` — the building block for peeling a transport wrapper (`Json`,
+/// `Result`, `Valid`, `Piped`) off a payload type. The wrapper-name-parameterised
+/// generalisation of the `Arc`-specific `arc_inner`.
+pub fn nth_generic_type<'a>(ty: &'a Type, name: &str, idx: usize) -> Option<&'a Type> {
+    let Type::Path(tp) = ty else { return None };
+    let seg = tp.path.segments.last()?;
+    if seg.ident != name {
+        return None;
+    }
+    let PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return None;
+    };
+    args.args
+        .iter()
+        .filter_map(|arg| match arg {
+            GenericArgument::Type(t) => Some(t),
+            _ => None,
+        })
+        .nth(idx)
+}
+
 /// The constructor expression for a struct's `from_container`, plus the
 /// `TypeId` expression of each `#[inject]` dependency. The dep keys feed the
 /// `Discoverable::dependencies` impl that lets `#[module]` order registration.
