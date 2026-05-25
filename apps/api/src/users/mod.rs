@@ -1,5 +1,4 @@
 pub mod controller;
-pub mod dto;
 pub mod entity;
 pub mod module;
 pub mod resolver;

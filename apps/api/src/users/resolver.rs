@@ -7,7 +7,7 @@ use sea_orm::Condition;
 use uuid::Uuid;
 
 use crate::authz::ORG_ACME;
-use crate::users::dto::{CreateUserInput, UserDto};
+use crate::users::entity::{CreateUserInput, User};
 use crate::users::service::{UsersService, UsersServiceByName};
 
 fn to_gql_error(error: impl std::fmt::Display) -> async_graphql::Error {
@@ -23,17 +23,17 @@ pub struct UsersResolver {
 #[resolver]
 impl UsersResolver {
     #[query]
-    async fn users(&self) -> Result<Vec<UserDto>> {
+    async fn users(&self) -> Result<Vec<User>> {
         let rows = self
             .users
             .list(Condition::all())
             .await
             .map_err(to_gql_error)?;
-        Ok(rows.iter().map(UserDto::from).collect())
+        Ok(rows.iter().map(User::from).collect())
     }
 
     #[query]
-    async fn user(&self, id: String) -> Result<Option<UserDto>> {
+    async fn user(&self, id: String) -> Result<Option<User>> {
         let id = Uuid::parse_str(&id).map_err(to_gql_error)?;
         Ok(self
             .users
@@ -41,26 +41,26 @@ impl UsersResolver {
             .await
             .map_err(to_gql_error)?
             .as_ref()
-            .map(UserDto::from))
+            .map(User::from))
     }
 
     #[mutation]
-    async fn create_user(&self, input: CreateUserInput) -> Result<UserDto> {
+    async fn create_user(&self, input: CreateUserInput) -> Result<User> {
         // GraphQL has no request principal, so new users land in the seed org.
         let row = self
             .users
             .create(input, ORG_ACME)
             .await
             .map_err(to_gql_error)?;
-        Ok(UserDto::from(&row))
+        Ok(User::from(&row))
     }
 
     #[field]
     async fn namesakes(
         &self,
-        parent: &UserDto,
+        parent: &User,
         by_name: &DataLoader<UsersServiceByName>,
-    ) -> Result<Vec<UserDto>> {
+    ) -> Result<Vec<User>> {
         // `?` surfaces a real loader error; `unwrap_or_default` only covers the
         // legitimate "no rows for this name" case (`load_one` returns `None`).
         let same_name = by_name

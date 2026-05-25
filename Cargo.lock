@@ -107,6 +107,7 @@ dependencies = [
  "nestrs-middleware",
  "nestrs-openapi",
  "nestrs-pipes",
+ "nestrs-resource",
  "nestrs-server-timing",
  "nestrs-telemetry",
  "poem",
@@ -1940,6 +1941,23 @@ dependencies = [
 
 [[package]]
 name = "nestrs-queue-macros"
+version = "0.1.0"
+dependencies = [
+ "nestrs-macro-support",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "nestrs-resource"
+version = "0.1.0"
+dependencies = [
+ "nestrs-resource-macros",
+]
+
+[[package]]
+name = "nestrs-resource-macros"
 version = "0.1.0"
 dependencies = [
  "nestrs-macro-support",

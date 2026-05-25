@@ -4,19 +4,19 @@ input CreateUserInput {
 }
 
 type Mutation {
-	createUser(input: CreateUserInput!): UserDto!
+	createUser(input: CreateUserInput!): User!
 }
 
 type Query {
-	user(id: String!): UserDto
-	users: [UserDto!]!
+	user(id: String!): User
+	users: [User!]!
 }
 
-type UserDto {
+type User {
 	email: String!
 	id: String!
 	name: String!
-	namesakes: [UserDto!]!
+	namesakes: [User!]!
 }
 
 """

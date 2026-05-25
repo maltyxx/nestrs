@@ -9,8 +9,7 @@ use poem::{Error, Result};
 
 use crate::auth::{AuthGuard, AuthUser};
 use crate::authz::AbilityGuard;
-use crate::users::dto::CreateUserInput;
-use crate::users::entity;
+use crate::users::entity::{self, CreateUserInput};
 use crate::users::service::UsersService;
 
 // Handlers return raw rows: the `Authorize<_, entity::Entity>` parameter makes

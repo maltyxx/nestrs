@@ -111,6 +111,8 @@ nestrs-openapi = { path = "crates/nestrs-openapi" }
 nestrs-pipes = { path = "crates/nestrs-pipes" }
 nestrs-queue = { path = "crates/nestrs-queue" }
 nestrs-queue-macros = { path = "crates/nestrs-queue-macros" }
+nestrs-resource = { path = "crates/nestrs-resource" }
+nestrs-resource-macros = { path = "crates/nestrs-resource-macros" }
 nestrs-schedule = { path = "crates/nestrs-schedule" }
 nestrs-schedule-macros = { path = "crates/nestrs-schedule-macros" }
 nestrs-server-timing = { path = "crates/nestrs-server-timing" }

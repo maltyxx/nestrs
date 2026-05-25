@@ -14,6 +14,7 @@ nestrs-http.workspace = true
 nestrs-middleware.workspace = true
 nestrs-openapi.workspace = true
 nestrs-pipes.workspace = true
+nestrs-resource.workspace = true
 nestrs-server-timing.workspace = true
 nestrs-telemetry.workspace = true
 poem.workspace = true

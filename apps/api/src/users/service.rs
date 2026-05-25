@@ -12,8 +12,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::authz::{ORG_ACME, ORG_GLOBEX};
-use crate::users::dto::{CreateUserInput, UserDto};
-use crate::users::entity::{self, ActiveModel, Entity as Users};
+use crate::users::entity::{self, ActiveModel, CreateUserInput, Entity as Users, User};
 
 #[injectable]
 pub struct UsersService {
@@ -49,8 +48,8 @@ impl UsersService {
 // the body is a single `WHERE name = ANY($1)` query, killing the N+1.
 #[dataloader]
 impl UsersService {
-    async fn by_name(&self, names: &[String]) -> HashMap<String, Vec<UserDto>> {
-        let mut buckets: HashMap<String, Vec<UserDto>> =
+    async fn by_name(&self, names: &[String]) -> HashMap<String, Vec<User>> {
+        let mut buckets: HashMap<String, Vec<User>> =
             names.iter().map(|name| (name.clone(), Vec::new())).collect();
         let rows = Users::find()
             .filter(entity::Column::Name.is_in(names.iter().cloned()))
@@ -62,7 +61,7 @@ impl UsersService {
             });
         for row in &rows {
             if let Some(bucket) = buckets.get_mut(&row.name) {
-                bucket.push(UserDto::from(row));
+                bucket.push(User::from(row));
             }
         }
         buckets
