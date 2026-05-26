@@ -1,0 +1,50 @@
+name: 🐞 Bug report
+description: Something doesn't work as documented or expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. A **minimal reproduction** is the single most
+        helpful thing you can include — it's the difference between a fix today
+        and a fix someday.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest code or steps that trigger the bug. Link a repo or paste a snippet.
+      render: rust
+    validations:
+      required: true
+  - type: input
+    id: crate
+    attributes:
+      label: Affected crate(s)
+      placeholder: "nestrs-core, nestrs-http, …"
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: "`rustc --version`, your OS, and whether you're in the dev container."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Any relevant compiler output, panic, or runtime logs.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for a duplicate.
+          required: true

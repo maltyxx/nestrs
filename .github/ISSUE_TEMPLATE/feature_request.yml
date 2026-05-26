@@ -1,0 +1,37 @@
+name: 💡 Feature request
+description: Propose a capability or an improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the **problem** first — the use case you're stuck on. Solutions
+        are far easier to evaluate once the problem is clear. For anything large,
+        consider opening a
+        [Discussion](https://github.com/maltyxx/nestrs/discussions) before an issue.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that NestRS makes hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea / proposed direction
+      description: >-
+        Optional. If you have one — bonus points if it fits the macro-first
+        model (see CLAUDE.md): a recurring pattern usually wants a new decorator
+        macro, not hand-rolled boilerplate.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and discussions for a duplicate.
+          required: true
