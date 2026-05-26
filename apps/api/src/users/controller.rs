@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use nestrs_authz::{Ability, Action, Authorize, Create, Read};
+use nestrs_authz::{Ability, Action, Create, Read};
+use nestrs_authz_http::Authorize;
 use nestrs_http::{controller, routes, Ctx, Piped, Valid};
 use nestrs_pipes::ParseUuidV7;
 use poem::http::StatusCode;

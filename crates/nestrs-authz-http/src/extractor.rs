@@ -9,9 +9,7 @@ use std::sync::Arc;
 use poem::http::StatusCode;
 use poem::{Error, FromRequest, Request, RequestBody, Result};
 
-use crate::ability::Ability;
-use crate::action::ActionMarker;
-use crate::subject::Subject;
+use nestrs_authz::{Ability, ActionMarker, Subject};
 
 /// Declares that a handler requires action `A` on subject `S`. Add it as a
 /// parameter — `_authz: Authorize<Read, users::Entity>` — and the request is

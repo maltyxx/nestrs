@@ -20,8 +20,8 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::ability::Ability;
-use crate::action::{Action, ActionMarker};
+use nestrs_authz::{Ability, Action, ActionMarker};
+
 use crate::extractor::Authorize;
 
 impl<A, S> RouteResponseShaper for Authorize<A, S>

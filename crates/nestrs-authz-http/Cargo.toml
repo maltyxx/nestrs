@@ -1,0 +1,23 @@
+[package]
+name = "nestrs-authz-http"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "HTTP surface bindings for nestrs-authz: the Authorize route gate, the request-scoped AbilityGuard, and transparent response masking."
+
+[dependencies]
+# The transport-agnostic authorization engine this binds to the HTTP surface.
+nestrs-authz.workspace = true
+# `Authorize` is a poem extractor implementing `RouteResponseShaper`, and
+# `AbilityGuard` implements the `Guard` trait re-exported here.
+nestrs-http.workspace = true
+poem.workspace = true
+# `AbilityGuard` is `#[injectable]` (it resolves the app's `AbilityFactory`).
+nestrs-core.workspace = true
+# Response masking deserializes the body into the subject's `EntityTrait::Model`,
+# which is why this coupling lives here and not in the generic HTTP crate.
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true

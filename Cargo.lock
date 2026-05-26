@@ -99,6 +99,7 @@ dependencies = [
  "anyhow",
  "async-graphql",
  "nestrs-authz",
+ "nestrs-authz-http",
  "nestrs-core",
  "nestrs-graphql",
  "nestrs-health",
@@ -1773,6 +1774,16 @@ dependencies = [
 name = "nestrs-authz"
 version = "0.1.0"
 dependencies = [
+ "sea-orm",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "nestrs-authz-http"
+version = "0.1.0"
+dependencies = [
+ "nestrs-authz",
  "nestrs-core",
  "nestrs-http",
  "poem",

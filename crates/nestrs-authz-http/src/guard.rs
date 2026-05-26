@@ -1,5 +1,5 @@
 //! [`AbilityGuard<F>`] — the request-scoped bridge that turns the authenticated
-//! actor into the [`Ability`](crate::Ability) the enforcement layers read.
+//! actor into the [`Ability`](nestrs_authz::Ability) the enforcement layers read.
 //!
 //! It is generic over the app's [`AbilityFactory`], so the only app-specific
 //! parts (the policy and the actor type) stay in the app; the wiring — read the
@@ -13,12 +13,11 @@ use nestrs_http::{async_trait, Guard};
 use poem::http::StatusCode;
 use poem::{Request, Response};
 
-use crate::builder::AbilityBuilder;
-use crate::factory::AbilityFactory;
+use nestrs_authz::{AbilityBuilder, AbilityFactory};
 
 /// Bind it per route after the authentication guard, parameterized by the app's
 /// factory: `#[use_guards(AuthGuard, AbilityGuard<AppAbility>)]`. It resolves the
-/// factory from the container, builds the actor's [`Ability`](crate::Ability),
+/// factory from the container, builds the actor's [`Ability`](nestrs_authz::Ability),
 /// and stores it as `Arc<Ability>` for the [`Authorize`](crate::Authorize)
 /// extractor and handlers to read.
 ///
