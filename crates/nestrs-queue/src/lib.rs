@@ -46,10 +46,12 @@
 //! ```
 
 mod connection;
+mod module;
 mod processor;
 mod worker;
 
 pub use connection::{Queue, QueueConnection};
+pub use module::{QueueModule, QueueOptions, QueueSetup};
 pub use processor::{Job, Processor, ProcessorMeta};
 pub use worker::QueueWorker;
 
