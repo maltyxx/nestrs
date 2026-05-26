@@ -3,12 +3,41 @@
 </p>
 
 <p align="center">
-  <em>An opinionated Rust framework that leans on procedural macros to keep
-  application code declarative — NestJS-inspired on the surface, Rust-native
-  underneath.</em>
+  <strong>NestJS ergonomics, Rust performance.</strong><br>
+  A declarative, decorator-driven backend framework that compiles to a single
+  native binary — a fraction of the memory, none of the garbage-collector tax.
 </p>
 
-Applications live under `apps/`, reusable building blocks under `crates/`.
+<p align="center">
+  <img src="https://img.shields.io/badge/built%20with-Rust-CE412B?logo=rust&logoColor=white" alt="Built with Rust">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License">
+  <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status: alpha">
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome">
+</p>
+
+> [!NOTE]
+> **Alpha — under active development.** The API still shifts and rough edges
+> remain, so it is not production-ready yet. Stars and early feedback are very
+> welcome.
+
+## Why NestRS
+
+- ⚡ **Rust-native speed.** Built on the same hyper/tokio core as the fastest Rust
+  web frameworks — multiples of a Node service's throughput, no GC pauses, and
+  tail latencies that stay flat under load.
+- 🪶 **An order of magnitude less memory.** A footprint in the tens of MB, not
+  hundreds — smaller instances, higher density, a lighter cloud bill.
+- 🚀 **Boots in milliseconds.** A single static native binary with no runtime to
+  warm up — friendly to autoscaling and cold starts.
+- 🧩 **Familiar and declarative.** `#[module]`, `#[controller]`, `#[injectable]`,
+  `#[resolver]`, `#[processor]` — if you know NestJS, you already know the shape.
+- 🛡️ **Verified before it serves.** The DI graph is wired by macros and checked at
+  boot — no `forwardRef` dance, no `reflect-metadata`, no runtime surprises.
+- 📦 **Batteries included.** HTTP, GraphQL, OpenAPI, MCP, Redis-backed queues,
+  scheduling, CASL-style authorization, health probes and OpenTelemetry — each an
+  opt-in crate, so you compile only what you import.
+
+<sub>Performance figures describe typical native-Rust-vs-Node behaviour; NestRS's own published benchmarks are on the way.</sub>
 
 ## Vision
 
@@ -26,11 +55,14 @@ lower-level code. Much of the friction that made higher-level runtimes
 attractive — boilerplate, slower scaffolding, a steeper learning curve — is
 easier to absorb today, regardless of the language.
 
-That seems to leave room to revisit an old trade-off: keep the declarative,
-decorator-driven style that makes NestJS pleasant to work in, but build it on a
-native, compiled foundation that uses less memory and energy. NestRS is an
-experiment in that direction — not a claim to be better, just an attempt to see
-how far familiar ergonomics carry on a leaner base.
+That is the trade-off NestRS reopens: keep the declarative, decorator-driven
+style that makes NestJS productive, but build it on a native, compiled foundation
+that doesn't bill you for it in RAM. One `cargo` step compiles and type-checks
+(no separate, slow `tsc` pass), modules wire up regardless of import order, and
+the result ships as one lean binary. It's young and moving fast — the ambition is
+real, the polish is still arriving.
+
+Applications live under `apps/`, reusable building blocks under `crates/`.
 
 ## What the framework provides
 
