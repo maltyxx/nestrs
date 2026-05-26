@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use nestrs_core::config::env_var;
+use nestrs_config::env_var;
 use nestrs_http::interceptor;
 use nestrs_middleware::{Interceptor, Next};
 use poem::{Request, Response, Result};

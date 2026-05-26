@@ -5,12 +5,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "Core building blocks (DI container, module trait, config, errors) for the nestrs framework."
+description = "Core building blocks (DI container, module trait, lifecycle, access graph) for the nestrs framework."
 
 [dependencies]
 thiserror.workspace = true
-figment.workspace = true
-serde.workspace = true
 nestrs-macros.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
@@ -20,6 +18,3 @@ tracing.workspace = true
 # Link-time registry: each `#[hooks]` method submits a lifecycle hook so `App`
 # composes them at boot with no central list (same mechanism as GraphQL).
 inventory.workspace = true
-
-[dev-dependencies]
-figment = { workspace = true, features = ["test"] }

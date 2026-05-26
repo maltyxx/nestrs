@@ -1,4 +1,4 @@
-use nestrs_core::config::env_var;
+use nestrs_config::env_var;
 
 #[derive(Debug, Clone)]
 pub struct WeatherConfig {

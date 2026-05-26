@@ -1,3 +1,9 @@
+//! Configuration loading for nestrs — the `@nestjs/config` analog.
+//!
+//! Kept out of `nestrs-core` so the kernel (container, modules, lifecycle) does
+//! not drag `figment` into every crate that depends on it; an app or framework
+//! crate that needs configuration depends on `nestrs-config` directly.
+
 use std::env;
 
 use figment::{
@@ -5,8 +11,24 @@ use figment::{
     Figment,
 };
 use serde::de::DeserializeOwned;
+use thiserror::Error;
 
-use crate::error::Result;
+/// A configuration failure — currently only a wrapped figment error.
+// `figment::Error` is ~208 bytes; boxing it keeps every `Result<_, ConfigError>`
+// small, satisfying `clippy::result_large_err` without bloating the hot path.
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("configuration error: {0}")]
+    Source(Box<figment::Error>),
+}
+
+impl From<figment::Error> for ConfigError {
+    fn from(value: figment::Error) -> Self {
+        Self::Source(Box::new(value))
+    }
+}
+
+pub type Result<T> = std::result::Result<T, ConfigError>;
 
 /// Framework-wide environment-variable scheme.
 ///
@@ -36,7 +58,7 @@ use crate::error::Result;
 ///
 /// [`load`] is the bulk loader for apps that prefer a TOML file overlaid
 /// with env vars; individual framework crates expose `from_env()` shortcuts
-/// that read the same names directly.
+/// that read the same names directly via [`env_var`].
 pub fn load<T: DeserializeOwned>(toml_path: Option<&str>) -> Result<T> {
     let mut figment = Figment::new();
     if let Some(path) = toml_path {

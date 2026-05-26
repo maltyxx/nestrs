@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 nestrs-core.workspace = true
+nestrs-config.workspace = true
 nestrs-mcp.workspace = true
 nestrs-health.workspace = true
 nestrs-http.workspace = true

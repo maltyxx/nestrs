@@ -1,11 +1,11 @@
-use nestrs_core::config::env_var;
+use nestrs_config::env_var;
 
 /// Configuration for [`crate::Telemetry::init`].
 ///
 /// # Environment variables
 ///
 /// Follows the framework-wide `NESTRS_<DOMAIN>__<KEY>` scheme documented in
-/// `nestrs_core::config` — double underscore separates the domain, the leaf
+/// `nestrs_config` — double underscore separates the domain, the leaf
 /// key keeps snake_case. Three domains are owned here: `log`, `service`,
 /// `telemetry`. The `http` domain is owned by the `OtelHttp` interceptor directly.
 ///

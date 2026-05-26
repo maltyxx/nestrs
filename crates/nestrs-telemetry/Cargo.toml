@@ -25,6 +25,7 @@ otlp = [
 
 [dependencies]
 nestrs-core.workspace = true
+nestrs-config.workspace = true
 nestrs-http.workspace = true
 nestrs-middleware.workspace = true
 poem.workspace = true
