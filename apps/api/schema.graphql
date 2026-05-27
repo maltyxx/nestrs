@@ -1,13 +1,29 @@
+input CreateOrgInput {
+	name: String!
+}
+
 input CreateUserInput {
 	email: String!
 	name: String!
 }
 
 type Mutation {
+	createOrg(input: CreateOrgInput!): Org!
 	createUser(input: CreateUserInput!): User!
 }
 
+type Org {
+	id: String!
+	name: String!
+	"""
+	The has-many side: an org's members, batched through the users loader.
+	"""
+	users: [User!]!
+}
+
 type Query {
+	org(id: String!): Org
+	orgs: [Org!]!
 	user(id: String!): User
 	users: [User!]!
 }
@@ -17,6 +33,8 @@ type User {
 	id: String!
 	name: String!
 	namesakes: [User!]!
+	org: Org
+	orgId: String!
 }
 
 """

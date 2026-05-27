@@ -64,6 +64,25 @@ impl UsersService {
         }
         buckets
     }
+
+    async fn by_org(&self, org_ids: &[Uuid]) -> HashMap<Uuid, Vec<User>> {
+        let mut buckets: HashMap<Uuid, Vec<User>> =
+            org_ids.iter().map(|org_id| (*org_id, Vec::new())).collect();
+        let rows = Users::find()
+            .filter(entity::Column::OrgId.is_in(org_ids.iter().cloned()))
+            .all(self.db.as_ref())
+            .await
+            .unwrap_or_else(|err| {
+                tracing::error!(target: "nestrs::loader", error = %err, "by_org loader query failed");
+                Vec::new()
+            });
+        for row in &rows {
+            if let Some(bucket) = buckets.get_mut(&row.org_id) {
+                bucket.push(User::from(row));
+            }
+        }
+        buckets
+    }
 }
 
 #[hooks]

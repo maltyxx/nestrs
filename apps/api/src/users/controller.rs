@@ -10,6 +10,7 @@ use poem::{Error, Result};
 
 use crate::authn::{AuthGuard, AuthUser};
 use crate::authz::AppAbilityGuard;
+use crate::errors::internal;
 use crate::users::entity::{self, CreateUserInput};
 use crate::users::service::UsersService;
 
@@ -73,8 +74,4 @@ impl UsersController {
             .map_err(internal)?;
         Ok(Json(row))
     }
-}
-
-fn internal(err: impl std::fmt::Display) -> Error {
-    Error::from_string(err.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
 }

@@ -8,6 +8,7 @@ use nestrs_telemetry::TelemetryModule;
 
 use crate::authn::AuthnModule;
 use crate::authz::AuthzModule;
+use crate::orgs::OrgsModule;
 use crate::users::UsersModule;
 
 #[module(
@@ -18,6 +19,7 @@ use crate::users::UsersModule;
         }),
         AuthnModule,
         AuthzModule,
+        OrgsModule,
         UsersModule,
         GraphqlModule::for_root(GraphqlOptions {
             path: "/graphql".into(),

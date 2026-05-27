@@ -6,12 +6,11 @@ use nestrs_graphql::resolver;
 use sea_orm::Condition;
 use uuid::Uuid;
 
+use crate::errors::gql;
+use crate::orgs::entity::Org;
+use crate::orgs::service::OrgsServiceById;
 use crate::users::entity::{CreateUserInput, User};
 use crate::users::service::{UsersService, UsersServiceByName, ORG_ACME};
-
-fn to_gql_error(error: impl std::fmt::Display) -> async_graphql::Error {
-    async_graphql::Error::new(error.to_string())
-}
 
 #[resolver]
 pub struct UsersResolver {
@@ -23,34 +22,32 @@ pub struct UsersResolver {
 impl UsersResolver {
     #[query]
     async fn users(&self) -> Result<Vec<User>> {
-        let rows = self
-            .users
-            .list(Condition::all())
-            .await
-            .map_err(to_gql_error)?;
+        let rows = self.users.list(Condition::all()).await.map_err(gql)?;
         Ok(rows.iter().map(User::from).collect())
     }
 
     #[query]
     async fn user(&self, id: String) -> Result<Option<User>> {
-        let id = Uuid::parse_str(&id).map_err(to_gql_error)?;
+        let id = Uuid::parse_str(&id).map_err(gql)?;
         Ok(self
             .users
             .find(id)
             .await
-            .map_err(to_gql_error)?
+            .map_err(gql)?
             .as_ref()
             .map(User::from))
     }
 
     #[mutation]
     async fn create_user(&self, input: CreateUserInput) -> Result<User> {
-        let row = self
-            .users
-            .create(input, ORG_ACME)
-            .await
-            .map_err(to_gql_error)?;
+        let row = self.users.create(input, ORG_ACME).await.map_err(gql)?;
         Ok(User::from(&row))
+    }
+
+    #[field]
+    async fn org(&self, parent: &User, by_id: &DataLoader<OrgsServiceById>) -> Result<Option<Org>> {
+        let id = Uuid::parse_str(&parent.org_id)?;
+        Ok(by_id.load_one(id).await?)
     }
 
     #[field]
