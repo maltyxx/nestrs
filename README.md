@@ -271,10 +271,10 @@ host.
 Then start an app in watch mode:
 
 ```bash
+just dev          # the bare `app` baseline on :3001
 just dev api      # REST + GraphQL on :3002
 just dev mcp      # MCP server on :3003
 just dev worker   # background jobs & scheduling (headless)
-just dev          # the bare `app` baseline on :3001
 ```
 
 `just dev` runs under `bacon`, which rebuilds and restarts the binary on every
