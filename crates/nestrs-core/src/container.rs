@@ -94,12 +94,15 @@ pub struct ContainerBuilder {
     /// `TypeId`s of modules already visited in the collect phase — the
     /// equivalent dedup for [`Module::collect`](crate::Module::collect).
     collected_modules: HashSet<TypeId>,
-    /// Async factories awaiting their turn in [`AppBuilder::build`](crate::AppBuilder::build).
-    /// Seeded by [`provide_factory`](Self::provide_factory), whether at the
-    /// composition root or by a module's [`collect`](crate::Module::collect).
+    /// Async factories awaiting their turn in [`AppBuilder::build`](crate::AppBuilder::build),
+    /// each paired with the `TypeId` of the provider it produces. Seeded by
+    /// [`provide_factory`](Self::provide_factory), whether at the composition root
+    /// or by a module's [`collect`](crate::Module::collect). The `TypeId` lets the
+    /// build skip a factory whose output a seed already supplies (a test injecting
+    /// a pre-built resource in place of the one a `for_root` would construct).
     /// Builder-only state: drained before [`build`](Self::build), never copied
     /// into the [`Container`] or a [`snapshot`](Self::snapshot).
-    factories: Vec<BoxedFactory>,
+    factories: Vec<(TypeId, BoxedFactory)>,
     /// Request-scoped provider factories, copied into the built [`Container`].
     scoped: HashMap<TypeId, ScopedFactory>,
 }
@@ -219,13 +222,14 @@ impl ContainerBuilder {
         F: FnOnce(Container) -> Fut + Send + 'static,
         Fut: Future<Output = Result<T>> + Send + 'static,
     {
-        self.factories.push(Box::new(move |container| {
+        let boxed: BoxedFactory = Box::new(move |container| {
             Box::pin(async move {
                 let value = factory(container).await?;
                 let registrar: Registrar = Box::new(move |builder| builder.provide(value));
                 Ok(registrar)
             })
-        }));
+        });
+        self.factories.push((TypeId::of::<T>(), boxed));
         self
     }
 
@@ -256,9 +260,9 @@ impl ContainerBuilder {
         self
     }
 
-    /// Drain the queued async factories — called by `AppBuilder::build` once,
-    /// after the collect phase, to run them in order.
-    pub(crate) fn take_factories(&mut self) -> Vec<BoxedFactory> {
+    /// Drain the queued async factories (each with its output `TypeId`) — called
+    /// by `AppBuilder::build` once, after the collect phase, to run them in order.
+    pub(crate) fn take_factories(&mut self) -> Vec<(TypeId, BoxedFactory)> {
         std::mem::take(&mut self.factories)
     }
 

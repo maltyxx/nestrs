@@ -158,7 +158,9 @@ struct ModuleHooks {
 /// 3. **Factories** — every queued factory (from a module's `collect` or from
 ///    [`provide_factory`](AppBuilder::provide_factory) at the root) is `await`ed.
 ///    Each sees the container so far, so it may depend on a seed or an earlier
-///    factory; a returned `Err` aborts the build.
+///    factory; a returned `Err` aborts the build. A factory whose output type a
+///    seed already supplies is **skipped** — a seed wins over a module's
+///    `for_root` factory, the path a test takes to inject a pre-built resource.
 /// 4. **Register** — each module's [`register`](crate::Module::register) builds
 ///    its providers last, injecting the seeds and factory outputs above.
 ///
@@ -209,7 +211,8 @@ impl AppBuilder {
     /// Register an async factory at the composition root — for a resource not
     /// owned by any module (most module-owned resources expose a `for_root`
     /// instead). Its awaited output is stored as a provider, injectable as
-    /// `Arc<T>`; a returned `Err` aborts the build:
+    /// `Arc<T>`; a returned `Err` aborts the build. If a seed already supplies
+    /// `T`, this factory is skipped (the seed wins):
     ///
     /// ```ignore
     /// App::builder()
@@ -288,7 +291,15 @@ impl AppBuilder {
             builder = (hooks.collect)(builder);
         }
         // Factory phase: run all queued factories (module-owned and root-level).
-        for factory in builder.take_factories() {
+        // A factory whose output type a seed already supplies is skipped, so a
+        // seed wins over a module's `for_root` factory — the path a test takes to
+        // boot against a pre-built resource (an `EphemeralDatabase` connection in
+        // place of `DatabaseModule`'s). In production nothing seeds a type a
+        // module factory owns, so every factory runs.
+        for (type_id, factory) in builder.take_factories() {
+            if builder.contains(type_id) {
+                continue;
+            }
             let register = factory(builder.snapshot()).await?;
             builder = register(builder);
         }
@@ -459,5 +470,34 @@ mod tests {
             .await
             .expect("build succeeds");
         assert_eq!(app.container().get::<Doubled>().unwrap().0, 14);
+    }
+
+    #[tokio::test]
+    async fn a_seed_short_circuits_a_factory_of_the_same_type() {
+        // The seed supplies `Config`, so the (would-be-explosive) factory of the
+        // same type never runs — the seed wins. This is how a test injects a
+        // pre-built resource in place of a module's `for_root` factory.
+        let app = App::builder()
+            .provide(Config(99))
+            .provide_factory::<Config, _, _>(|_| async { panic!("skipped factory must not run") })
+            .build()
+            .await
+            .expect("build succeeds");
+        assert_eq!(app.container().get::<Config>().unwrap().0, 99);
+    }
+
+    #[tokio::test]
+    async fn a_seed_short_circuits_a_module_owned_collect_factory() {
+        // `ConfigModule::collect` queues a `Config(7)` factory; the seed `Config(1)`
+        // shadows it, so `DoublerModule` reads the seed — the `EphemeralDatabase`
+        // path, where a seeded connection replaces `DatabaseModule`'s.
+        let app = App::builder()
+            .provide(Config(1))
+            .module::<ConfigModule>()
+            .module::<DoublerModule>()
+            .build()
+            .await
+            .expect("build succeeds");
+        assert_eq!(app.container().get::<Doubled>().unwrap().0, 2);
     }
 }

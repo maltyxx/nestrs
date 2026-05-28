@@ -173,6 +173,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-graphql",
+ "db",
  "nestrs-authz",
  "nestrs-authz-http",
  "nestrs-core",
@@ -206,6 +207,7 @@ dependencies = [
  "anyhow",
  "nestrs-core",
  "nestrs-http",
+ "nestrs-testing",
  "poem",
  "tokio",
 ]
@@ -2251,10 +2253,12 @@ dependencies = [
  "nestrs-middleware",
  "nestrs-server-timing",
  "nestrs-telemetry",
+ "nestrs-testing",
  "poem",
  "reqwest",
  "rmcp",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tracing",
@@ -2661,8 +2665,12 @@ dependencies = [
  "anyhow",
  "nestrs-core",
  "nestrs-http",
+ "nestrs-telemetry",
  "poem",
+ "sea-orm",
+ "sea-orm-migration",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -5905,6 +5913,7 @@ dependencies = [
  "nestrs-queue",
  "nestrs-schedule",
  "nestrs-telemetry",
+ "nestrs-testing",
  "serde",
  "tokio",
  "tracing",

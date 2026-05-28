@@ -47,6 +47,25 @@ impl Telemetry {
         Self::init_with(TelemetryConfig::from_env(service_name))
     }
 
+    /// Console-only tracing for tests: installs a fmt subscriber (once) and marks
+    /// telemetry initialised, so an app importing
+    /// [`TelemetryModule`](crate::TelemetryModule) boots without the OTLP exporter
+    /// stack. **Idempotent** — safe to call from every test; the first call wins
+    /// and later calls are no-ops (and a subscriber already set by another harness
+    /// is tolerated). Returns no guard: a test does not flush exporters. The log
+    /// level honours `RUST_LOG`, defaulting to `warn` to keep test output quiet.
+    pub fn init_for_tests() {
+        if initialized() {
+            return;
+        }
+        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
+        let _ = Registry::default()
+            .with(filter)
+            .with(console_layer(LogFormat::Text))
+            .try_init();
+        mark_initialized();
+    }
+
     pub fn init_with(config: TelemetryConfig) -> Result<Self, TelemetryError> {
         let filter =
             EnvFilter::try_new(&config.log_filter).unwrap_or_else(|_| EnvFilter::new("info"));
