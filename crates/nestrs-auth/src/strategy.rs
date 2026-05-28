@@ -1,0 +1,57 @@
+//! The [`Strategy`] trait — how a request becomes an authenticated identity.
+//!
+//! A strategy is an ordinary `#[injectable]` provider (so it can inject a
+//! [`JwtService`](crate::JwtService), an HTTP client, a user repository) that
+//! implements one method. [`AuthGuard<S>`](crate::AuthGuard) drives it per route,
+//! mirroring NestJS's `AuthGuard('name')` selecting a Passport strategy.
+//!
+//! There is no `#[strategy]` macro: `#[injectable]` plus this trait is the entire
+//! surface, so a macro would generate nothing. One is warranted only if a real
+//! boilerplate pattern emerges.
+
+use async_trait::async_trait;
+use poem::{http::header, Request, Response};
+
+use crate::error::AuthError;
+
+/// What a [`Strategy`] decided about a request.
+///
+/// The two arms are why one trait serves both stateless and redirect-based
+/// schemes: a bearer strategy always [`Authenticated`](Outcome::Authenticated) or
+/// errors, while an OAuth strategy [`Challenge`](Outcome::Challenge)s the browser
+/// with a redirect to the identity provider on the initiating request and
+/// authenticates on the callback.
+pub enum Outcome<P> {
+    /// Identity established. [`AuthGuard`](crate::AuthGuard) inserts `P` into the
+    /// request extensions for downstream guards (e.g. `AbilityGuard`) and the
+    /// `Ctx<P>` extractor to read.
+    Authenticated(P),
+    /// The client must act before it can be authenticated — typically a `302` to
+    /// an OAuth provider, or a `401` challenge. The guard short-circuits the
+    /// request with this response.
+    Challenge(Response),
+}
+
+/// Turns a request into an authenticated principal, or says why it cannot.
+///
+/// Bind it to routes with `#[use_guards(AuthGuard<MyStrategy>)]` (usually via a
+/// `type` alias, like `AbilityGuard`).
+#[async_trait]
+pub trait Strategy: Send + Sync + 'static {
+    /// The authenticated caller this strategy produces. Inserted into the request
+    /// on success, so downstream code reads it back with `Ctx<Self::Principal>`.
+    type Principal: Clone + Send + Sync + 'static;
+
+    /// Inspect the request and decide. The request is borrowed mutably so a
+    /// strategy may attach scratch state; the principal itself is attached by
+    /// [`AuthGuard`](crate::AuthGuard), not here.
+    async fn authenticate(&self, req: &mut Request) -> Result<Outcome<Self::Principal>, AuthError>;
+}
+
+/// Pull the token out of an `Authorization: Bearer <token>` header, if present
+/// and non-empty. The building block of any bearer/JWT [`Strategy`].
+pub fn bearer_token(req: &Request) -> Option<&str> {
+    let value = req.headers().get(header::AUTHORIZATION)?.to_str().ok()?;
+    let token = value.strip_prefix("Bearer ")?.trim();
+    (!token.is_empty()).then_some(token)
+}

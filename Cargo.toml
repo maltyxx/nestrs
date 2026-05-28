@@ -39,6 +39,14 @@ tracing-opentelemetry = "0.33"
 thiserror = "2"
 anyhow = "1"
 
+# JWT — the engine `@nestjs/jwt` itself wraps on the npm side; HS/RS/ES algorithms.
+# `rust_crypto` selects the pure-Rust backend (no aws-lc-rs C dependency), matching
+# the workspace's rustls posture; jsonwebtoken 10 requires picking one explicitly.
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+# OAuth2 Authorization Code flow (+ PKCE); the `reqwest` backend below drives its
+# token exchange. The per-provider strategy lives in the app, like Passport.
+oauth2 = "5"
+
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -86,7 +94,9 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 # schemars must match rmcp's re-exported version so the derive resolves to the
 # same trait rmcp::handler::server::wrapper::Parameters expects.
 rmcp = { version = "1.7", features = ["server", "macros", "transport-streamable-http-server"] }
-schemars = "1"
+# `uuid1` adds the `JsonSchema` impl for `uuid::Uuid` so UUID-typed DTO fields can
+# be documented (and typed at the edge) rather than passed around as strings.
+schemars = { version = "1", features = ["uuid1"] }
 
 # Cron expression parsing for #[cron_job(cron = "...")]. croner accepts 5/6/7
 # fields (seconds optional), matching the flexibility of the `cron` npm package
@@ -110,6 +120,8 @@ proc-macro2 = "1"
 
 # Internal crates
 nestrs-core = { path = "crates/nestrs-core" }
+nestrs-auth = { path = "crates/nestrs-auth" }
+nestrs-throttler = { path = "crates/nestrs-throttler" }
 nestrs-config = { path = "crates/nestrs-config" }
 nestrs-events = { path = "crates/nestrs-events" }
 nestrs-events-macros = { path = "crates/nestrs-events-macros" }

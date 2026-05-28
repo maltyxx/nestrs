@@ -1,0 +1,36 @@
+[package]
+name = "nestrs-auth"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Authentication for nestrs: a JwtService (sign/verify), a pluggable Strategy trait, and the request-scoped AuthGuard that establishes the caller's identity."
+
+[dependencies]
+# `AuthGuard` is `#[injectable]` (it resolves the app's `Strategy`); `AuthModule`
+# is a `DynamicModule` that provides the configured `JwtService` as global infra.
+nestrs-core.workspace = true
+# `Strategy` reads the `poem::Request`; `AuthGuard` implements the `Guard` trait
+# re-exported by the HTTP surface.
+nestrs-http.workspace = true
+poem.workspace = true
+async-trait.workspace = true
+# Token signing/verification — kept internal to this crate (apps never depend on
+# jsonwebtoken directly), mirroring how nestrs-queue hides apalis.
+jsonwebtoken.workspace = true
+# OAuth2 Authorization Code flow; its bundled reqwest (re-exported as
+# `oauth2::reqwest`) drives the token exchange, so we add no second reqwest. The
+# default features (reqwest + rustls-tls) are exactly what we want.
+oauth2.workspace = true
+serde.workspace = true
+# Parsing the OAuth userinfo response (oauth2's reqwest is built without its
+# `json` feature, so we read the body and deserialize it ourselves).
+serde_json.workspace = true
+thiserror.workspace = true
+# `OAuth2Module::for_root` provides the client through the factory phase, whose
+# error channel is anyhow (the container's `Result`).
+anyhow.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }

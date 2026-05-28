@@ -38,6 +38,31 @@ crate (it emits absolute-path tokens resolved at the call site), so there is
 no cycle. The macros are the leverage the project pays to maintain; spending
 them aggressively is the point.
 
+## The developer writes business logic; the framework carries the rest
+
+The project's reason to exist: a developer concentrates on their domain, and the
+framework makes the cross-cutting, error-prone concerns — **security
+(authentication, authorization, row-level filtering), transactions, and the
+conversion/validation of inputs** — *transparent*. A feature that forces the
+developer to hand-manage any of those is a defect in the framework's ergonomics,
+not the app's problem to solve.
+
+This makes **controllers thin**: a handler holds no business logic and no ad-hoc
+conversion. Each concern has one home, and a handler only wires them together:
+
+- a **Guard** decides access and attaches request context (the caller, a tenant);
+- a **Pipe** converts and validates an input *at the edge* — the target is to hand
+  the handler a domain object, not a raw scalar (resolve an `id` to its entity in
+  the pipe, so the service receives the entity);
+- a **Service** holds the business logic;
+- an **Interceptor** carries cross-cutting work (e.g. wrapping a handler in a DB
+  transaction) so the developer never writes it by hand.
+
+If a handler is doing conversion, a permission check, or transaction management
+inline, that is drift — push it into the matching layer above. The unbuilt steps
+toward full transparency (entity-binding pipes, auto-applied row filters, implicit
+transactions) are tracked in the roadmap.
+
 ## Dependency injection is internal
 
 The Rust DI ecosystem was surveyed; none of the active candidates met our
@@ -287,6 +312,43 @@ and URI **API versioning** via `#[controller(version = "1")]` mounts the whole
 controller under `/v1` (`version_path` is the single source of truth so the
 served path, the boot log, and the OpenAPI document never drift). Header /
 media-type versioning is not yet built.
+
+## Authentication establishes identity; authorization consumes it
+
+`nestrs-auth` answers *who the caller is*, the counterpart to `nestrs-authz`'s
+*what they may do*. The two compose at the request boundary: an `AuthGuard` runs
+first and attaches the principal to the request extensions; an `AbilityGuard`
+(`nestrs-authz-http`) then reads that principal to build the caller's `Ability`.
+Bind them in order — `#[use_guards(AuthGuard, AppAbilityGuard)]`.
+
+A **`Strategy`** turns a request into a principal, and is a plain `#[injectable]`
+provider implementing one method — no `#[strategy]` macro, because `#[injectable]`
+plus the trait is the entire surface. **`AuthGuard<S>`** is generic over that
+strategy (resolved from the container), mirroring `AbilityGuard<F>`; an app binds
+it through a `type` alias. One trait serves both schemes because
+`Strategy::authenticate` returns an **`Outcome`**: `Authenticated(principal)` (the
+guard attaches it) or `Challenge(Response)` (the guard short-circuits — a `401`,
+or an OAuth `302` to the provider). A bearer/JWT strategy always authenticates or
+errors; an OAuth strategy challenges on the initiating request and authenticates
+on the callback, exactly like Passport's one guard bound to both routes.
+
+**`JwtService`** (sign/verify, the `@nestjs/jwt` analog) is configured by
+`AuthModule::for_root` and provided through the **factory phase**, so it is global
+infrastructure — injectable by any strategy, guard, or service regardless of
+import order, like the database and queue connections. Construction is synchronous;
+the async factory is only the channel that makes it global.
+
+**OAuth2** (`OAuth2Client`, the Authorization Code flow + PKCE) keeps the
+provider-agnostic plumbing — build the redirect, exchange the code, fetch the
+userinfo — in the crate; the app writes the per-provider `Strategy` (endpoints via
+`OAuth2Config`, and the userinfo→principal mapping), exactly as Passport leaves the
+provider strategy to the app. The CSRF `state` and the PKCE verifier survive the
+round-trip in a short JWT signed by `JwtService` and carried as a cookie — no
+server-side session, tamper-proof, no new storage. `oauth2`'s re-exported reqwest
+drives the exchange, so the crate adds no second HTTP client. The flat container
+keys by type, so one app wires one `OAuth2Client` today; multiple providers would
+need per-provider newtypes. `apps/api` is the exemplar (bearer login + a
+GitHub-style OAuth redirect).
 
 ## Scheduling is the first concern proved out as its own crate
 

@@ -1,63 +1,8 @@
-use nestrs_core::injectable;
-use nestrs_http::{async_trait, Guard};
-use poem::http::StatusCode;
-use poem::{Request, Response};
-use uuid::Uuid;
+//! The app's authentication guard. It is just [`nestrs_auth::AuthGuard`] bound to
+//! this app's [`JwtStrategy`], so it verifies the bearer JWT and attaches the
+//! [`AuthUser`](crate::authn::AuthUser). Bind it with `#[use_guards(AuthGuard)]`;
+//! an `AbilityGuard` may follow it to build the caller's authorization.
 
-use crate::authn::principal::{AuthUser, Role};
+use crate::authn::strategy::JwtStrategy;
 
-#[injectable]
-#[derive(Default)]
-pub struct AuthGuard;
-
-#[async_trait]
-impl Guard for AuthGuard {
-    async fn check(&self, req: &mut Request) -> Result<(), Response> {
-        let header = |name: &str| {
-            req.headers()
-                .get(name)
-                .and_then(|v| v.to_str().ok())
-                .map(str::to_owned)
-        };
-        let api_key = header("x-api-key").filter(|k| !k.is_empty());
-        let org_id = header("x-org-id").and_then(|s| Uuid::parse_str(&s).ok());
-        let roles = header("x-roles").map(|s| parse_roles(&s));
-
-        if api_key.is_none() {
-            return Err(unauthorized("missing or empty x-api-key header"));
-        }
-        let Some(org_id) = org_id else {
-            return Err(unauthorized(
-                "missing or invalid x-org-id header (expected a UUID)",
-            ));
-        };
-
-        req.extensions_mut().insert(AuthUser {
-            org_id,
-            roles: roles.unwrap_or_else(|| vec![Role::User]),
-        });
-        Ok(())
-    }
-}
-
-fn parse_roles(raw: &str) -> Vec<Role> {
-    let roles: Vec<Role> = raw
-        .split(',')
-        .filter_map(|token| match token.trim().to_ascii_lowercase().as_str() {
-            "admin" => Some(Role::Admin),
-            "user" => Some(Role::User),
-            _ => None,
-        })
-        .collect();
-    if roles.is_empty() {
-        vec![Role::User]
-    } else {
-        roles
-    }
-}
-
-fn unauthorized(message: &'static str) -> Response {
-    Response::builder()
-        .status(StatusCode::UNAUTHORIZED)
-        .body(message)
-}
+pub type AuthGuard = nestrs_auth::AuthGuard<JwtStrategy>;

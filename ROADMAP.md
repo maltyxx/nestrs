@@ -12,6 +12,22 @@ The authoritative record of *what was decided and why* is
 
 ## Recently shipped
 
+- **Rate limiting** — `nestrs-throttler`: a per-route `ThrottlerGuard`
+  (`#[use_guards(ThrottlerGuard)]`) reading an optional `#[meta(Throttle::...)]`
+  override (the `@nestjs/throttler` `ThrottlerGuard` + `@Throttle` analog), backed
+  by an in-memory fixed-window counter keyed by client IP; over-limit requests get
+  `429` + `Retry-After`. `ThrottlerModule::for_root` sets the default. `apps/api`
+  rate-limits `POST /auth/login`. A Redis-backed store for multi-process
+  deployments is the remaining piece.
+- **Authentication** — `nestrs-auth`: a `JwtService` (sign/verify, the `@nestjs/jwt`
+  analog) made injectable everywhere by `AuthModule::for_root`; a pluggable
+  `Strategy` trait + the request-scoped `AuthGuard<S>` (the `AuthGuard('jwt')`
+  analog) that establishes the caller and attaches it for `nestrs-authz` to
+  authorize; and an `OAuth2Client` for the Authorization Code flow (PKCE, with the
+  CSRF/PKCE state carried in a `JwtService`-signed cookie — no server-side
+  session). One `Strategy` serves both bearer tokens and the redirect-based OAuth
+  handshake. `apps/api` demos a bearer login (`POST /auth/login`) and a
+  GitHub-style OAuth redirect (`GET /auth/oauth`).
 - **Cron expressions** — `#[cron_job(cron = "0 */5 * * * *")]` (the `@Cron` analog),
   with `CronExpression` presets, an optional `tz` (IANA name, default UTC), and a
   one-shot `after = "10s"` (the `@Timeout` analog) joining the existing interval
@@ -83,6 +99,47 @@ These are known, deliberate omissions called out in the code today:
   header- and media-type-based selection (NestJS's other `VersioningType`s, which
   need request-time dispatch) are not yet built.
 
+## Next — feature parity with NestJS
+
+These are NestJS building blocks an app still has to hand-roll. Listed because
+they are *load-bearing for real use*, not for completeness — each maps to a known
+NestJS name and earns its place. (Authentication and rate limiting, formerly the
+standout gaps here, now ship — see *Recently shipped*.) The verdict on what is
+**not** worth reproducing is in *Not on the roadmap* below.
+
+- **Redis-backed rate-limit store** — `nestrs-throttler` ships with an in-memory
+  fixed-window counter; a Redis store would share limits across processes (the
+  `@nest-lab/throttler-storage-redis` analog), reusing the queue's connection
+  pattern. The guard would take a storage trait object then.
+- **Caching** — a `CacheModule` + a response-caching interceptor + an injectable
+  `Cache` (the `@nestjs/cache-manager` analog), memory- or Redis-backed. Common,
+  though an app survives without it.
+- **File upload & streaming responses** — a multipart extractor for uploads and a
+  `StreamableFile` response (the `FileInterceptor` / `StreamableFile` analog) for
+  large or generated payloads.
+- **OpenAPI completeness** — already under *the documented gaps* above, repeated
+  here because it is an *incomplete shipped feature*, not a future one: the emitted
+  document omits query parameters entirely and types every path parameter as
+  `string`. Documenting security schemes becomes the highest-value fix once auth
+  lands.
+
+## Next — making the hard parts transparent
+
+The project's mission (see [CLAUDE.md](CLAUDE.md)): the developer writes business
+logic; the framework carries security, transactions, and conversion so they never
+have to. These are the concrete steps toward that — they go *beyond* what NestJS
+itself automates, and each removes hand-written plumbing from app code.
+
+- **Entity-binding pipes** — a pipe that resolves an `id` to its loaded entity, so
+  a handler (and the service behind it) receives the domain object, not the
+  scalar — route-model binding. Needs a pipe with container/repository access, an
+  extension of today's stateless `nestrs-pipes` model.
+- **Automatic row-level filtering** — the authorization `Ability`'s `condition_for`
+  applied to a query *by the framework*, not hand-called in each service method,
+  so a feature cannot forget to scope its reads to what the caller may see.
+- **Transparent transactions** — an interceptor (or native ORM support) wraps a
+  handler in a transaction automatically, so a developer never threads one by hand.
+
 ## Next — project & release infrastructure
 
 None of this exists yet; it is what turns the workspace into a project others can
@@ -118,6 +175,10 @@ split would make impossible.
 
 ## Later — exploring
 
+- **Real-time surface** — WebSocket gateways (the `@WebSocketGateway` /
+  `@SubscribeMessage` analog), Server-Sent Events (`@Sse`), and GraphQL
+  subscriptions (`EmptySubscription` today). One transport effort; built when an
+  example app genuinely needs it, not speculatively.
 - GraphQL **federation**, and the dedicated schema tooling it would reintroduce.
 - More transports and surfaces as the discovery model proves out.
 
@@ -128,3 +189,10 @@ By design — see the *Hard "no" list* in [CLAUDE.md](CLAUDE.md):
 - No external dependency-injection library — the container is ours.
 - No splitting the workspace into microservices "for scalability".
 - No backwards-compatibility shims while the API is pre-1.0.
+- **No `ClassSerializerInterceptor` / `@Exclude` / `@Expose`** — serde already owns
+  serialization (`#[serde(skip)]`, or a dedicated response DTO); a per-request
+  "groups" interceptor is not worth reproducing.
+- **No `HttpModule` / `HttpService`** — inject a configured `reqwest::Client`; an
+  axios-style wrapper would be pure ceremony.
+- **No NestJS `Logger` service** — `tracing` is the idiomatic, structured, superior
+  answer, and is already the project's logging layer.

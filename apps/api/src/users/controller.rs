@@ -58,7 +58,7 @@ impl UsersController {
     #[use_guards(AuthGuard, AppAbilityGuard)]
     #[api(
         summary = "Create a user in the caller's org",
-        description = "Requires the `x-api-key` and `x-org-id` headers.",
+        description = "Requires a bearer JWT (obtain one from `POST /auth/login`).",
         tags("Users")
     )]
     async fn create(
