@@ -14,3 +14,8 @@ tokio.workspace = true
 tracing.workspace = true
 serde.workspace = true
 anyhow.workspace = true
+
+[dev-dependencies]
+# The e2e boots headless against the real Redis the worker uses and drives a
+# queue round-trip through the QueueWorker transport.
+nestrs-testing.workspace = true

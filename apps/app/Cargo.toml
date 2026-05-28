@@ -10,3 +10,6 @@ nestrs-http.workspace = true
 poem.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
+
+[dev-dependencies]
+nestrs-testing.workspace = true

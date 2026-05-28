@@ -33,6 +33,11 @@ serde_json.workspace = true
 
 [dev-dependencies]
 # `test` enables poem's in-process TestClient, used to drive the mounted
-# endpoints without binding a socket or a live database.
+# endpoints without binding a socket.
 poem = { workspace = true, features = ["test"] }
-nestrs-testing.workspace = true
+# `telemetry` satisfies the TelemetryModule boot guard; `orm` provides the
+# throwaway Postgres database fixture.
+nestrs-testing = { workspace = true, features = ["telemetry", "orm"] }
+# The e2e migrates the throwaway database with the same migrations production
+# uses; `db` carries the `Migrator`.
+db = { path = "../db" }
