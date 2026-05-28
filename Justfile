@@ -1,6 +1,7 @@
 _default:
     @just --list
 
+# Run an app in watch mode (default: app). Usage: just dev mcp
 dev app="app":
     bacon run-long -- --bin {{app}}
 
@@ -15,12 +16,20 @@ build:
 # Database lifecycle — migrations + seeding. Usage: just db up|down|fresh|status|seed|reset
 mod db
 
-# Run the full test suite (parallel, fast)
+# Run all tests
 test:
     cargo nextest run --workspace
 
-# Test coverage summary (text, per-file)
-cov:
+# Run e2e tests
+test-e2e:
+    cargo nextest run --workspace -E 'binary(e2e)'
+
+# Run unit tests
+test-unit:
+    cargo nextest run --workspace -E 'not binary(e2e)'
+
+# Run coverage
+test-cov:
     cargo llvm-cov nextest --workspace
 
 # Clippy (strict) + format check
