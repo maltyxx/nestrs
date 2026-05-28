@@ -23,3 +23,10 @@ inventory.workspace = true
 poem.workspace = true
 # GraphqlModule logs the boot-time SDL emit through the framework's tracing.
 tracing.workspace = true
+
+[dev-dependencies]
+# Boot the schema in-process and fire GraphQL requests at it (the ContextSeed
+# bridge test). nestrs-http/nestrs-core are already runtime deps above.
+nestrs-testing.workspace = true
+tokio.workspace = true
+serde_json.workspace = true

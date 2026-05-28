@@ -13,10 +13,15 @@
 //! compile-time `MergedObject` tuple, which is what keeps this compatible with
 //! async-graphql's static `Schema<Q, M, S>`.
 
+mod context;
 mod loader;
 mod module;
 mod resolver;
 
+/// Forward a per-request value from the poem request into the GraphQL context —
+/// the bridge a resolver (and GraphQL authorization) reads request-scoped state
+/// through. Submit one with `inventory`.
+pub use context::ContextSeed;
 pub use module::{GraphqlModule, GraphqlOptions, GraphqlSetup};
 // `pub` only so `#[resolver]`/`#[dataloader]`-generated code can name them;
 // `#[doc(hidden)]` at their definitions keeps them out of the app-facing surface.

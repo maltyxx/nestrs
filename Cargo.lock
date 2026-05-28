@@ -2383,7 +2383,10 @@ dependencies = [
  "nestrs-core",
  "nestrs-graphql-macros",
  "nestrs-http",
+ "nestrs-testing",
  "poem",
+ "serde_json",
+ "tokio",
  "tracing",
 ]
 

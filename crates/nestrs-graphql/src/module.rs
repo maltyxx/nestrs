@@ -130,7 +130,13 @@ fn register(builder: ContainerBuilder, options: GraphqlOptions) -> ContainerBuil
                     ),
                 }
             }
-            let mut method = poem::post(async_graphql_poem::GraphQL::new(schema));
+            // Our endpoint instead of `async_graphql_poem::GraphQL` so each
+            // registered `ContextSeed` forwards per-request poem state into the
+            // GraphQL context (e.g. the actor's authz `Ability`).
+            let mut method = poem::post(crate::context::ContextEndpoint::new(
+                schema,
+                container.clone(),
+            ));
             if options.playground {
                 let html = async_graphql::http::playground_source(
                     async_graphql::http::GraphQLPlaygroundConfig::new(options.path.as_str()),
