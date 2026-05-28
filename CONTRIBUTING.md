@@ -72,10 +72,12 @@ Before opening a PR, make sure these pass:
 just fmt && just lint && just test
 ```
 
-For **HTTP, GraphQL, or MCP changes**, `just test` is necessary but not
-sufficient — routing and wiring bugs don't surface in unit tests. Start the app
-(`just dev <app>`), exercise the affected endpoints (`curl`, an MCP client, the
-GraphQL playground), and confirm the behaviour live. A GraphQL change should
+Routing and wiring bugs don't surface in **unit** tests — the **e2e** tests
+catch most of them in `just test`. For **HTTP, GraphQL, or MCP changes** that is
+still not sufficient: start the app (`just dev <app>`), exercise the affected
+endpoints (`curl`, an MCP client, the GraphQL playground), and confirm the
+behaviour live (real socket and external services the in-process harness can't
+reach). A GraphQL change should
 regenerate the committed SDL by running the dev server (see CLAUDE.md).
 
 ## Pull requests
@@ -85,8 +87,10 @@ regenerate the committed SDL by running the dev server (see CLAUDE.md).
 2. **Keep it focused.** One logical change per PR. Unrelated cleanups belong in
    their own PR.
 3. **Add tests.** A bug fix gets a regression test; a feature gets coverage of
-   the new behaviour. Persistence tests use real Postgres via `testcontainers` —
-   the database is never mocked.
+   the new behaviour. Unit tests cover logic in isolation; persistence and wiring
+   are exercised by **e2e tests** that boot the real app against a real Postgres
+   (the dev container provides one; `testcontainers` in CI) — the database is
+   never mocked.
 4. **Update the docs.** If you change behaviour, update the README, the crate
    docs, and — if you made a design decision — CLAUDE.md.
 5. **Write a clear description.** What changed, why, and how you verified it. Link

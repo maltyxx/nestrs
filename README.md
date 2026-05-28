@@ -235,16 +235,16 @@ surface is decorator macros — reach for them first (`#[injectable]`, `#[module
 | `nestrs-health` | Kubernetes liveness / readiness / startup probes |
 | `nestrs-telemetry` | Structured logs, OpenTelemetry traces & metrics, per-request access log + `X-Trace-Id` |
 | `nestrs-server-timing` | `Server-Timing` response headers |
-| `nestrs-testing` | In-process test harness — boot the real DI graph and fire HTTP / GraphQL requests in `cargo test`, with provider overrides |
+| `nestrs-testing` | In-process test harness — boot the real DI graph and drive HTTP / GraphQL / headless transports in `cargo test`, with provider overrides and fixtures (ephemeral Postgres, telemetry) |
 
 Decorator macros live in companion `*-macros` crates (a Rust `proc-macro` crate
 can export only macros) with shared codegen in `nestrs-codegen`; these are
 internal plumbing, re-exported by the crates above and never depended on directly.
 
-Most of the table runs in the example apps today; the newest crates
-(`nestrs-events`, `nestrs-authz-graphql`, `nestrs-testing`) ship with their own
-tests but are not yet wired into an example app — doing so is a good first
-contribution. The rough edges and deliberately-deferred gaps (cron expressions,
+Most of the table runs in the example apps today, and every app ships an
+end-to-end test built on `nestrs-testing`; a couple of newer crates
+(`nestrs-events`, `nestrs-authz-graphql`) ship with their own tests but are not
+yet wired into an example app — doing so is a good first contribution. The rough edges and deliberately-deferred gaps (cron expressions,
 OpenAPI security schemes, GraphQL federation) are tracked in the open
 [roadmap](ROADMAP.md) — nothing here is a hidden TODO.
 
@@ -311,14 +311,16 @@ Run `just` with no arguments to list every recipe.
 | `just dev <app>` | Run an app in watch mode (rebuild + restart on change), e.g. `just dev api` or `just dev mcp` |
 | `just run <app>` | Run an app in release mode, e.g. `just run api` |
 | `just build` | Build release binaries for every app in the workspace |
-| `just test` | Run the full test suite |
-| `just cov` | Test coverage summary (per-file %) |
+| `just test` | Run all tests |
+| `just test-e2e` | Run e2e tests |
+| `just test-unit` | Run unit tests |
+| `just test-cov` | Run coverage |
 | `just lint` | Clippy (strict) + format check |
 | `just fmt` | Apply rustfmt |
 | `just check` | Fast type-check (no codegen) |
 | `just db <verb>` | Manage the shared database: `up`, `down`, `fresh`, `status`, `seed`, `reset` (e.g. `just db up`, then `just db seed`) |
 
-`build`, `test`, `cov`, `lint`, `fmt`, and `check` always operate on the whole
+`build`, `test`, `test-cov`, `lint`, `fmt`, and `check` always operate on the whole
 workspace; `dev` and `run` take an app name (default `app`); `just db` (run bare
 to list the verbs) manages the shared Postgres schema and seed data.
 
@@ -330,11 +332,17 @@ same building blocks. They will grow over time.
 
 | App | Kind | Port |
 |-----|------|------|
-| `api` | REST + GraphQL, persisted & authorized | 3002 |
 | `app` | Minimal HTTP baseline | 3001 |
+| `api` | REST + GraphQL, persisted & authorized | 3002 |
 | `db` | Shared-database migrations & seeding (CLI) | — |
 | `mcp` | Model Context Protocol server | 3003 |
 | `worker` | Background jobs & scheduling (headless) | — |
+
+### `app` — Minimal HTTP endpoint (port 3001)
+
+Started with `just dev app`. A single `GET /` returning `Hello World` on
+`http://0.0.0.0:3001`, kept deliberately bare — no health, telemetry, or
+middleware — as a baseline for benchmarking the framework's request path.
 
 ### `api` — REST + GraphQL, persisted and authorized (port 3002)
 
@@ -362,12 +370,6 @@ a bundled offline Swagger UI at `/api`, and a full request pipeline — route
 guards for authentication and CASL-style authorization (one ability drives access
 gating, query pre-filtering, and response masking), with validation pipes on the
 inputs.
-
-### `app` — Minimal HTTP endpoint (port 3001)
-
-Started with `just dev app`. A single `GET /` returning `Hello World` on
-`http://0.0.0.0:3001`, kept deliberately bare — no health, telemetry, or
-middleware — as a baseline for benchmarking the framework's request path.
 
 ### `db` — Shared-database migrations & seeding
 

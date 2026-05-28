@@ -59,6 +59,11 @@ independent of call order:
 3. **Factories** — every queued factory is `await`ed (each sees the container so
    far, so it may depend on a seed or an earlier factory; an `Err` aborts boot).
    A root-level `provide_factory` lands here too, for a resource no module owns.
+   A factory whose output type a **seed already supplies is skipped** — a seed
+   wins over a module's `for_root` factory. In production nothing seeds a type a
+   module factory owns; the path exists so a test (`nestrs-testing`'s
+   `EphemeralDatabase`) can seed a pre-built resource in place of the one the
+   module would construct.
 4. **Register** — each module's `Module::register` builds its providers last,
    injecting the seeds and factory outputs above.
 
@@ -421,10 +426,13 @@ Do not add a stale dependency silently.
 
 ## "Done" means verified live
 
-For HTTP or GraphQL changes, `cargo test --workspace` is necessary but not
-sufficient. Start the binary (`cargo run --bin <app>` in the background),
-`curl` the affected endpoints, then kill the server before returning control.
-Routing and wiring bugs do not surface in unit tests.
+Routing and wiring bugs do not surface in **unit** tests. An **e2e** test
+(`nestrs-testing`, in-process — every app has one) now catches most of them in
+`cargo test`, so add or extend it. But for HTTP or GraphQL changes that is still
+not sufficient: start the binary (`cargo run --bin <app>` in the background),
+`curl` the affected endpoints, then kill the server before returning control —
+real-socket behaviour and live external services are what the in-process harness
+cannot reach.
 
 A GraphQL app commits its schema as SDL (`apps/<app>/schema.graphql`) so the API
 surface is reviewable in diffs. The schema is composed from the resolvers
@@ -467,8 +475,9 @@ dedicated tooling.)
 - No renaming of `apps/`.
 - No feature flags for capabilities that do not yet exist.
 - No backwards-compatibility shims (no public API to preserve yet).
-- No mocking the database in integration tests when persistence lands — use
-  `testcontainers` against real Postgres.
+- No mocking the database in **e2e tests** — exercise a real Postgres (the dev
+  container provides one; `testcontainers` in CI). Unit tests of pure logic
+  (validation, field mapping) need no database and may use a default connection.
 - No splitting the workspace into microservices "for scalability". The scope
   is multiple applications sharing libraries.
 

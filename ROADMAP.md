@@ -21,9 +21,12 @@ The authoritative record of *what was decided and why* is
   mounts a controller under `/v1` (one source of truth for the served path, the
   boot log, and the OpenAPI document); `#[use_filters(...)]` binds exception
   filters to a single route (the `@UseFilters` analog).
-- **`nestrs-testing`** — an in-process testing module that boots the real DI
-  graph and fires HTTP / GraphQL requests inside `cargo test`, with provider
-  overrides for mocking (the `Test.createTestingModule` analog).
+- **`nestrs-testing` + an e2e per app** — the in-process harness boots the real
+  DI graph and drives its surfaces inside `cargo test`, with provider overrides
+  for mocking (the `Test.createTestingModule` analog). It now also boots
+  **headless** for non-HTTP transports (the queue worker) and ships fixtures: an
+  ephemeral, migrated Postgres database and the telemetry boot guard. Every
+  example app ships an end-to-end test.
 - **Richer boot diagnostics** — the DI graph names the offending provider and the
   missing dependency, distinguishes a missing provider from a dependency cycle,
   and rejects a non-`Arc` `#[inject]` at compile time.
