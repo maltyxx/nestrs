@@ -20,7 +20,14 @@ default = ["otlp"]
 # id off the OTel span, so the whole interceptor body is otel-backed — there is
 # no useful interceptor without it. (A headless app uses `otlp` *without* `http`,
 # so it still skips poem; only the inverse is meaningless.)
-http = ["otlp", "dep:nestrs-http", "dep:nestrs-middleware", "dep:poem"]
+http = [
+    "otlp",
+    "dep:nestrs-http",
+    "dep:nestrs-middleware",
+    "dep:poem",
+    "dep:bytes",
+    "dep:futures-core",
+]
 otlp = [
     "dep:opentelemetry",
     "dep:opentelemetry_sdk",
@@ -38,6 +45,8 @@ nestrs-config.workspace = true
 nestrs-http = { workspace = true, optional = true }
 nestrs-middleware = { workspace = true, optional = true }
 poem = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
+futures-core = { workspace = true, optional = true }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tokio.workspace = true

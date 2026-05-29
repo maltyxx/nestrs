@@ -33,6 +33,7 @@ pub(in crate::weather) struct OpenMeteoClient {
 #[async_trait]
 impl WeatherProvider for OpenMeteoClient {
     async fn current(&self, latitude: f64, longitude: f64) -> Result<WeatherReport, WeatherError> {
+        tracing::debug!(latitude, longitude, "fetching current weather");
         let url =
             format!("{BASE_URL}?latitude={latitude}&longitude={longitude}&current_weather=true");
         let payload: OpenMeteoResponse = self
@@ -47,6 +48,12 @@ impl WeatherProvider for OpenMeteoClient {
         let current = payload
             .current_weather
             .ok_or(WeatherError::MissingPayload)?;
+        tracing::info!(
+            latitude,
+            longitude,
+            temperature_c = current.temperature,
+            "fetched current weather"
+        );
 
         Ok(WeatherReport {
             temperature_c: current.temperature,

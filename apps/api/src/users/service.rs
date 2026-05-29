@@ -42,13 +42,16 @@ impl UsersService {
             email: Set(input.email),
         };
         let conn = Repo::<Users>::conn()?;
-        Ok(row.insert(&conn).await?)
+        let user = row.insert(&conn).await?;
+        tracing::info!(id = %user.id, %org_id, "user created");
+        Ok(user)
     }
 }
 
 #[dataloader]
 impl UsersService {
     async fn by_name(&self, names: &[String]) -> HashMap<String, Vec<User>> {
+        tracing::debug!(target: "nestrs::loader", count = names.len(), "loading users by name");
         let mut buckets: HashMap<String, Vec<User>> = names
             .iter()
             .map(|name| (name.clone(), Vec::new()))
@@ -70,6 +73,7 @@ impl UsersService {
     }
 
     async fn by_org(&self, org_ids: &[Uuid]) -> HashMap<Uuid, Vec<User>> {
+        tracing::debug!(target: "nestrs::loader", count = org_ids.len(), "loading users by org");
         let mut buckets: HashMap<Uuid, Vec<User>> =
             org_ids.iter().map(|org_id| (*org_id, Vec::new())).collect();
         let rows = Users::find()

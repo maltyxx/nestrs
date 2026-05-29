@@ -35,13 +35,21 @@ pub struct AuthGuard<S: Strategy> {
 #[async_trait]
 impl<S: Strategy> Guard for AuthGuard<S> {
     async fn check(&self, req: &mut Request) -> Result<(), Response> {
+        let strategy = std::any::type_name::<S>();
         match self.strategy.authenticate(req).await {
             Ok(Outcome::Authenticated(principal)) => {
+                tracing::debug!(target: "nestrs::auth", strategy, "authenticated");
                 req.extensions_mut().insert(principal);
                 Ok(())
             }
-            Ok(Outcome::Challenge(response)) => Err(response),
-            Err(error) => Err(error.into_response()),
+            Ok(Outcome::Challenge(response)) => {
+                tracing::debug!(target: "nestrs::auth", strategy, "authentication challenge issued");
+                Err(response)
+            }
+            Err(error) => {
+                tracing::warn!(target: "nestrs::auth", strategy, error = %error, "authentication failed");
+                Err(error.into_response())
+            }
         }
     }
 }

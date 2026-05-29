@@ -31,6 +31,9 @@ thiserror.workspace = true
 # `OAuth2Module::for_root` provides the client through the factory phase, whose
 # error channel is anyhow (the container's `Result`).
 anyhow.workspace = true
+# `AuthGuard` logs the authentication outcome — a failure at `warn` so it is
+# visible in production, the audit point every strategy shares.
+tracing.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }

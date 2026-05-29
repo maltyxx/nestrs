@@ -17,8 +17,8 @@
 use async_trait::async_trait;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
-    ActiveModelBehavior, ActiveModelTrait, DbErr, EntityTrait, IntoActiveModel, ModelTrait,
-    PrimaryKeyTrait,
+    ActiveModelBehavior, ActiveModelTrait, DbErr, EntityName, EntityTrait, IntoActiveModel,
+    ModelTrait, PrimaryKeyTrait,
 };
 
 use nestrs_authz::{current_ability, Action};
@@ -63,8 +63,16 @@ where
     type Create: CreateModel<Self::Entity> + Send;
     type Update: UpdateModel<Self::Entity> + Send;
 
+    /// The entity's table name, the `entity` field every operation log carries
+    /// (the flat module path can't distinguish entities — they all log from
+    /// `nestrs_orm::service`).
+    fn entity_name() -> &'static str {
+        Self::Entity::default().table_name()
+    }
+
     /// Every row the caller may [`Read`](Action::Read), ability-scoped by `Repo`.
     async fn list(&self) -> Result<Vec<<Self::Entity as EntityTrait>::Model>, DbErr> {
+        tracing::debug!(target: "nestrs::orm", entity = Self::entity_name(), "listing rows");
         Repo::<Self::Entity>::all().await
     }
 
@@ -78,6 +86,7 @@ where
         <Self::Entity as EntityTrait>::PrimaryKey: PrimaryKeyTrait<ValueType = Uuid>,
         <Self::Entity as EntityTrait>::Model: Send + Sync,
     {
+        tracing::debug!(target: "nestrs::orm", entity = Self::entity_name(), first, ?after, "paging rows");
         Repo::<Self::Entity>::page(first, after).await
     }
 
@@ -101,11 +110,14 @@ where
         let allowed = current_ability()
             .map(|ability| ability.can::<Self::Entity>(action, &model))
             .unwrap_or(false);
-        Ok(if allowed {
-            Access::Found(model)
+        let entity = Self::entity_name();
+        if allowed {
+            tracing::debug!(target: "nestrs::orm", entity, %id, ?action, "access granted");
+            Ok(Access::Found(model))
         } else {
-            Access::Denied
-        })
+            tracing::warn!(target: "nestrs::orm", entity, %id, ?action, "access denied");
+            Ok(Access::Denied)
+        }
     }
 
     /// Insert a row from a create-input DTO, in the request transaction.
@@ -114,7 +126,9 @@ where
         input: Self::Create,
     ) -> Result<<Self::Entity as EntityTrait>::Model, DbErr> {
         let conn = Repo::<Self::Entity>::conn()?;
-        input.into_active_model().insert(&conn).await
+        let model = input.into_active_model().insert(&conn).await?;
+        tracing::info!(target: "nestrs::orm", entity = Self::entity_name(), "row created");
+        Ok(model)
     }
 
     /// Apply an update-input DTO to a loaded row, in the request transaction.
@@ -124,16 +138,19 @@ where
         input: Self::Update,
     ) -> Result<<Self::Entity as EntityTrait>::Model, DbErr> {
         let conn = Repo::<Self::Entity>::conn()?;
-        input
+        let updated = input
             .apply_to(model.into_active_model())
             .update(&conn)
-            .await
+            .await?;
+        tracing::info!(target: "nestrs::orm", entity = Self::entity_name(), "row updated");
+        Ok(updated)
     }
 
     /// Delete a loaded row, in the request transaction.
     async fn delete(&self, model: <Self::Entity as EntityTrait>::Model) -> Result<(), DbErr> {
         let conn = Repo::<Self::Entity>::conn()?;
         model.delete(&conn).await?;
+        tracing::info!(target: "nestrs::orm", entity = Self::entity_name(), "row deleted");
         Ok(())
     }
 }

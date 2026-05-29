@@ -61,6 +61,13 @@ figment = { version = "0.10", features = ["toml", "env"] }
 # single-static-binary promise.
 poem = { version = "3", features = ["tower-compat", "anyhow", "rustls"] }
 
+# Response-body plumbing for the access log: wrap poem's body stream in a byte
+# counter so the access event reports the exact size sent (poem stamps
+# Content-Length past the interceptor). `bytes::Bytes` is the chunk type,
+# `futures-core` the `Stream` trait the wrapper implements.
+bytes = "1"
+futures-core = "0.3"
+
 # Async traits (needed for `dyn Trait` containing async methods on Rust 1.75)
 async-trait = "0.1"
 

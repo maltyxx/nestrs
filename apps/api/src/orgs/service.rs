@@ -24,6 +24,7 @@ impl CrudService for OrgsService {
 #[dataloader]
 impl OrgsService {
     async fn by_id(&self, ids: &[Uuid]) -> HashMap<Uuid, Org> {
+        tracing::debug!(target: "nestrs::loader", count = ids.len(), "loading orgs by id");
         Orgs::find()
             .filter(entity::Column::Id.is_in(ids.iter().cloned()))
             .all(self.db.as_ref())

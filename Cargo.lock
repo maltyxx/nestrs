@@ -592,6 +592,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tracing",
  "uuid",
 ]
 
@@ -2554,6 +2555,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2891,6 +2893,8 @@ name = "nestrs-telemetry"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bytes",
+ "futures-core",
  "nestrs-config",
  "nestrs-core",
  "nestrs-http",
